@@ -186,7 +186,7 @@ class ThemeLayoutNode {
     children: [
       ThemeLayoutNode(
         type: ThemeNodeType.dynamicBackground,
-        props: {'shader': 'ps3_wave', 'color': '{{theme.background}}'},
+        props: {'shader': 'onda_grid', 'color': '{{theme.background}}'},
       ),
       ThemeLayoutNode(
         type: ThemeNodeType.padding,

@@ -227,6 +227,19 @@ class LibraryController extends Notifier<LibraryState> {
     }
   }
 
+  /// Returns all launchable apps & games currently installed on the device.
+  Future<List<InstalledApp>> loadInstalledApps() =>
+      _gateway.getInstalledApps(gamesOnly: false);
+
+  /// Extracts icons for [packageNames] so the picker UI can show app icons.
+  Future<Map<String, String>> loadAppIcons(List<String> packageNames) {
+    if (packageNames.isEmpty) return Future.value(const {});
+    return _gateway.getAppIcons(
+      packageNames,
+      sizePx: LibrarySyncService.iconSizePx,
+    );
+  }
+
   /// Opens the native Android SAF folder picker and scans APKs/ROMs from the
   /// chosen directory only.
   Future<SafEntry?> pickAndSyncGamesFolder() async {

@@ -129,3 +129,150 @@ class _ShaderPainter extends CustomPainter {
   bool shouldRepaint(_ShaderPainter old) =>
       old.shader != shader || old.colorA != colorA || old.colorB != colorB;
 }
+
+/// Static dark wireframe cyber-grid background used by the Default theme so it
+/// stays visually distinct from the PSP XMB silk wave ribbons.
+class OndaGridBackground extends StatelessWidget {
+  const OndaGridBackground({
+    super.key,
+    required this.colorA,
+    required this.colorB,
+    this.accentColor = const Color(0xFF00E5FF),
+    this.child,
+  });
+
+  final Color colorA;
+  final Color colorB;
+  final Color accentColor;
+  final Widget? child;
+
+  @override
+  Widget build(BuildContext context) {
+    return RepaintBoundary(
+      child: CustomPaint(
+        painter: _OndaGridPainter(
+          colorA: colorA,
+          colorB: colorB,
+          accentColor: accentColor,
+        ),
+        child: child,
+      ),
+    );
+  }
+}
+
+class _OndaGridPainter extends CustomPainter {
+  const _OndaGridPainter({
+    required this.colorA,
+    required this.colorB,
+    required this.accentColor,
+  });
+
+  final Color colorA;
+  final Color colorB;
+  final Color accentColor;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (size.isEmpty) return;
+    final rect = Offset.zero & size;
+
+    final basePaint = Paint()
+      ..shader = LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [colorA, colorB],
+      ).createShader(rect);
+    canvas.drawRect(rect, basePaint);
+
+    final glowPaint = Paint()
+      ..shader = RadialGradient(
+        center: const Alignment(0.0, -0.55),
+        radius: 0.95,
+        colors: [
+          accentColor.withValues(alpha: 0.14),
+          accentColor.withValues(alpha: 0.0),
+        ],
+      ).createShader(rect);
+    canvas.drawRect(rect, glowPaint);
+
+    final gridPaint = Paint()
+      ..color = accentColor.withValues(alpha: 0.08)
+      ..strokeWidth = 1.0
+      ..style = PaintingStyle.stroke;
+
+    const horizontalStep = 44.0;
+    for (double y = horizontalStep; y < size.height; y += horizontalStep) {
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), gridPaint);
+    }
+
+    // Subtle perspective vertical grid lines fanning slightly toward the bottom edge.
+    const columns = 14;
+    final centerX = size.width * 0.5;
+    final topStep = size.width / columns;
+    final bottomSpread = size.width * 1.28 / columns;
+    for (var i = -columns ~/ 2; i <= columns ~/ 2; i++) {
+      final topX = centerX + i * topStep;
+      final bottomX = centerX + i * bottomSpread;
+      canvas.drawLine(Offset(topX, 0), Offset(bottomX, size.height), gridPaint);
+    }
+
+    // Corner HUD bracket accents.
+    final bracketPaint = Paint()
+      ..color = accentColor.withValues(alpha: 0.14)
+      ..strokeWidth = 1.5
+      ..style = PaintingStyle.stroke;
+    const inset = 16.0;
+    const arm = 18.0;
+    // Top-left
+    canvas.drawLine(
+      const Offset(inset, inset),
+      const Offset(inset + arm, inset),
+      bracketPaint,
+    );
+    canvas.drawLine(
+      const Offset(inset, inset),
+      const Offset(inset, inset + arm),
+      bracketPaint,
+    );
+    // Top-right
+    canvas.drawLine(
+      Offset(size.width - inset, inset),
+      Offset(size.width - inset - arm, inset),
+      bracketPaint,
+    );
+    canvas.drawLine(
+      Offset(size.width - inset, inset),
+      Offset(size.width - inset, inset + arm),
+      bracketPaint,
+    );
+    // Bottom-left
+    canvas.drawLine(
+      Offset(inset, size.height - inset),
+      Offset(inset + arm, size.height - inset),
+      bracketPaint,
+    );
+    canvas.drawLine(
+      Offset(inset, size.height - inset),
+      Offset(inset, size.height - inset - arm),
+      bracketPaint,
+    );
+    // Bottom-right
+    canvas.drawLine(
+      Offset(size.width - inset, size.height - inset),
+      Offset(size.width - inset - arm, size.height - inset),
+      bracketPaint,
+    );
+    canvas.drawLine(
+      Offset(size.width - inset, size.height - inset),
+      Offset(size.width - inset, size.height - inset - arm),
+      bracketPaint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_OndaGridPainter old) =>
+      old.colorA != colorA ||
+      old.colorB != colorB ||
+      old.accentColor != accentColor;
+}

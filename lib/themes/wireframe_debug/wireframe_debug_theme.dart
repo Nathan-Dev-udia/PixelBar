@@ -256,14 +256,13 @@ class _WireframeDebugThemeState extends State<WireframeDebugTheme> {
         body: Stack(
           fit: StackFit.expand,
           children: [
-            if (!widget.state.settings.reduceMotion)
-              Positioned.fill(
-                child: ShaderBackground(
-                  colorA: bgColor,
-                  colorB: surfaceColor,
-                  animate: !widget.state.isLaunching,
-                ),
+            Positioned.fill(
+              child: OndaGridBackground(
+                colorA: bgColor,
+                colorB: surfaceColor,
+                accentColor: accentColor,
               ),
+            ),
             SafeArea(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,

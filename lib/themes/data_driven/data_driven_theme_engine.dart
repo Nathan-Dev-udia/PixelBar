@@ -579,6 +579,12 @@ class _DataDrivenThemeEngineState extends State<DataDrivenThemeEngine> {
       const Color(0xFF12161C),
       tokenFallback: 'surface',
     );
+    final accentColor = _resolveColor(
+      null,
+      manifest,
+      const Color(0xFF00E5FF),
+      tokenFallback: 'accent',
+    );
 
     final rawImage = node.props['image'];
     if (rawImage is String && rawImage.isNotEmpty) {
@@ -603,8 +609,20 @@ class _DataDrivenThemeEngineState extends State<DataDrivenThemeEngine> {
     }
 
     final shaderProp = node.props['shader'] as String?;
+    if (shaderProp == 'onda_grid' || shaderProp == 'wireframe_grid') {
+      return Positioned.fill(
+        child: OndaGridBackground(
+          colorA: colorA,
+          colorB: colorB,
+          accentColor: accentColor,
+        ),
+      );
+    }
+
     final shaderAsset = switch (shaderProp) {
-      'ps3_wave' || 'wave_background' => 'shaders/wave_background.frag',
+      'ps3_wave' ||
+      'psp_wave' ||
+      'wave_background' => 'shaders/wave_background.frag',
       final s? when s.endsWith('.frag') => s,
       _ => null,
     };
@@ -768,7 +786,7 @@ class _DataDrivenThemeEngineState extends State<DataDrivenThemeEngine> {
             children: [
               _ActionPill(
                 focusNode: _emptyAddNode,
-                label: 'Adicionar App [X]',
+                label: 'Selecionar Jogos [X]',
                 icon: Icons.add_box_outlined,
                 accentColor: accentColor,
                 fgColor: fgColor,

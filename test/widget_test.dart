@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ondadeck/core/memory/lifecycle_memory_manager.dart';
+import 'package:ondadeck/core/rendering/shader_background.dart';
 import 'package:ondadeck/core/state/library_controller.dart';
 import 'package:ondadeck/data/metadata/game_metadata_service.dart';
 import 'package:ondadeck/data/theme/theme_package_service.dart';
@@ -1201,6 +1202,182 @@ void main() {
           containsAll(['Folder APK Game', 'Sonic']),
         );
         expect(find.text('Gmail'), findsNothing);
+      },
+    );
+  });
+
+  group('Installed app picker search & distinct theme backgrounds', () {
+    testWidgets(
+      'default theme uses OndaGridBackground, PSP uses ShaderBackground, and picker filters/toggles installed apps',
+      (tester) async {
+        tester.view.physicalSize = const Size(1280, 720);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.reset);
+
+        LifecycleMemoryManager.instance.install();
+
+        final tempThemesDir = Directory.systemTemp.createTempSync(
+          'ondadeck_picker_bg_test_',
+        );
+        addTearDown(() {
+          if (tempThemesDir.existsSync()) {
+            tempThemesDir.deleteSync(recursive: true);
+          }
+        });
+
+        final fakeGateway = _FakeLauncherGateway(
+          installedApps: const [
+            InstalledApp(
+              packageName: 'com.phone.gmail',
+              label: 'Gmail',
+              isGame: false,
+            ),
+            InstalledApp(
+              packageName: 'com.game.zelda',
+              label: 'Zelda Mobile',
+              isGame: true,
+            ),
+            InstalledApp(
+              packageName: 'com.game.hollow',
+              label: 'Hollow Knight Port',
+              isGame: true,
+            ),
+          ],
+        );
+        final fakeRepo = _InMemoryGameLibraryRepository(
+          initialSettings: const LauncherSettings(
+            reduceMotion: false,
+            autoImportGames: false,
+          ),
+        );
+        final packageService = ThemePackageService(
+          themesDirProvider: () async => tempThemesDir.path,
+        );
+
+        late ProviderContainer container;
+
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              launcherGatewayProvider.overrideWithValue(fakeGateway),
+              gameLibraryRepositoryProvider.overrideWithValue(fakeRepo),
+              themePackageServiceProvider.overrideWithValue(packageService),
+            ],
+            child: Consumer(
+              builder: (context, ref, child) {
+                container = ProviderScope.containerOf(context);
+                return const OndaDeckApp();
+              },
+            ),
+          ),
+        );
+
+        for (var i = 0; i < 60; i++) {
+          await tester.runAsync(
+            () => Future<void>.delayed(const Duration(milliseconds: 25)),
+          );
+          await tester.pump();
+          final s = container.read(libraryControllerProvider);
+          if (s.status == LibraryStatus.ready &&
+              !s.isSyncing &&
+              s.lastSyncAt != null) {
+            break;
+          }
+        }
+        await tester.pumpAndSettle();
+
+        // Default theme ("Onda Default (Wireframe)") must show OndaGridBackground
+        // rather than the PSP silk wave ShaderBackground.
+        expect(
+          container.read(libraryControllerProvider).theme.id,
+          'wireframe_debug',
+        );
+        expect(find.byType(OndaGridBackground), findsOneWidget);
+        expect(find.byType(ShaderBackground), findsNothing);
+        expect(container.read(libraryControllerProvider).totalGames, 0);
+
+        // Open installed game/app selector from empty state button.
+        expect(find.text('Selecionar Jogos [X]'), findsOneWidget);
+        await tester.tap(find.text('Selecionar Jogos [X]'));
+        for (var i = 0; i < 40; i++) {
+          await tester.runAsync(
+            () => Future<void>.delayed(const Duration(milliseconds: 20)),
+          );
+          await tester.pump();
+          if (find.text('Zelda Mobile').evaluate().isNotEmpty) {
+            break;
+          }
+        }
+        await tester.pumpAndSettle();
+
+        expect(find.text('SELECIONAR JOGOS & APPS INSTALADOS'), findsOneWidget);
+        expect(find.text('Gmail'), findsOneWidget);
+        expect(find.text('Zelda Mobile'), findsOneWidget);
+        expect(find.text('Hollow Knight Port'), findsOneWidget);
+
+        // Search filters the installed apps list.
+        await tester.enterText(find.byType(TextField), 'Zelda');
+        await tester.pumpAndSettle();
+        final dialogZelda = find.descendant(
+          of: find.byType(Dialog),
+          matching: find.text('Zelda Mobile'),
+        );
+        expect(dialogZelda, findsOneWidget);
+        expect(find.text('Gmail'), findsNothing);
+        expect(find.text('Hollow Knight Port'), findsNothing);
+
+        // Tap to add 'Zelda Mobile' to the library.
+        await tester.tap(dialogZelda);
+        for (var i = 0; i < 40; i++) {
+          await tester.runAsync(
+            () => Future<void>.delayed(const Duration(milliseconds: 20)),
+          );
+          await tester.pump();
+          if (container.read(libraryControllerProvider).totalGames == 1) {
+            break;
+          }
+        }
+        await tester.pumpAndSettle();
+        expect(container.read(libraryControllerProvider).totalGames, 1);
+        expect(find.text('✓ Na Biblioteca [A]'), findsOneWidget);
+
+        // Tap again to remove 'Zelda Mobile' from the library.
+        await tester.tap(dialogZelda);
+        for (var i = 0; i < 40; i++) {
+          await tester.runAsync(
+            () => Future<void>.delayed(const Duration(milliseconds: 20)),
+          );
+          await tester.pump();
+          if (container.read(libraryControllerProvider).totalGames == 0) {
+            break;
+          }
+        }
+        await tester.pumpAndSettle();
+        expect(container.read(libraryControllerProvider).totalGames, 0);
+
+        // Close picker dialog and activate PSP XMB theme -> verify distinct background.
+        await tester.tap(find.text('Fechar [B]'));
+        await tester.pumpAndSettle();
+
+        await tester.runAsync(
+          () => container
+              .read(libraryControllerProvider.notifier)
+              .activateTheme('psp_xmb'),
+        );
+        for (var i = 0; i < 40; i++) {
+          await tester.runAsync(
+            () => Future<void>.delayed(const Duration(milliseconds: 20)),
+          );
+          await tester.pump(const Duration(milliseconds: 20));
+          if (container.read(libraryControllerProvider).theme.id == 'psp_xmb') {
+            break;
+          }
+        }
+        await tester.pump(const Duration(milliseconds: 50));
+
+        expect(container.read(libraryControllerProvider).theme.id, 'psp_xmb');
+        expect(find.byType(ShaderBackground), findsOneWidget);
+        expect(find.byType(OndaGridBackground), findsNothing);
       },
     );
   });

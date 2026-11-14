@@ -3,7 +3,8 @@
   "children": [
     {
       "type": "DynamicBackground",
-      "shader": "ps3_wave",
+      "shader": "onda_grid",
+      "image": "{{selectedGame.background}}",
       "color": "{{theme.background}}",
       "secondaryColor": "{{theme.surface}}"
     },

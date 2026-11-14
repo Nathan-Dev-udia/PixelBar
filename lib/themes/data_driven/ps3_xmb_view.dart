@@ -212,9 +212,9 @@ class _Ps3XmbViewState extends State<Ps3XmbView> {
       _XmbColumnKind.addGames => [
         _XmbActionOption(
           id: 'add_app',
-          title: 'Pasta de Jogos (APKs / ROMs)',
-          subtitle: 'Escolher pasta para escanear APKs e ROMs',
-          icon: Icons.folder_open_rounded,
+          title: 'Selecionar Jogos Instalados',
+          subtitle: 'Escolher jogos e aplicativos instalados no aparelho',
+          icon: Icons.sports_esports_rounded,
           onTrigger: widget.onAddApps ?? widget.onOpenSettings,
         ),
         if (widget.selectedGame != null && widget.onToggleFavorite != null)
@@ -332,9 +332,9 @@ class _Ps3XmbViewState extends State<Ps3XmbView> {
       if (widget.onAddApps != null)
         _XmbActionOption(
           id: 'drawer_add',
-          title: 'Escolher Pasta de Jogos',
-          subtitle: 'Configurar pasta de APKs e ROMs',
-          icon: Icons.folder_open_outlined,
+          title: 'Selecionar Jogos Instalados',
+          subtitle: 'Marcar quais jogos e apps aparecem na biblioteca',
+          icon: Icons.add_box_outlined,
           onTrigger: () {
             setState(() => _optionsOpen = false);
             widget.onAddApps!();
@@ -2228,8 +2228,8 @@ class _PspEmptyGamesSpine extends StatelessWidget {
             children: [
               _PspPillButton(
                 focusNode: addNode,
-                label: 'Pasta de Jogos [X]',
-                icon: Icons.folder_open_outlined,
+                label: 'Selecionar Jogos Instalados',
+                icon: Icons.sports_esports_rounded,
                 accentColor: accentColor,
                 fgColor: fgColor,
                 surfaceColor: surfaceColor,
