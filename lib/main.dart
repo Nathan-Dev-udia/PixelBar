@@ -9,9 +9,37 @@ import 'domain/models/game_item.dart';
 import 'domain/models/launcher_settings.dart';
 import 'domain/models/platform_models.dart';
 import 'themes/console_theme_widget.dart';
+import 'themes/data_driven/data_driven_theme_engine.dart';
+import 'themes/manager/theme_manager_screen.dart';
 import 'themes/wireframe_debug/wireframe_debug_theme.dart';
 
 void registerDefaultThemes() {
+  if (!ThemeEngineRegistry.instance.hasEngine('data_driven')) {
+    ThemeEngineRegistry.instance.register(
+      'data_driven',
+      ({
+        Key? key,
+        required state,
+        required onSelectGame,
+        required onLaunchGame,
+        required onOpenSettings,
+        onAddApps,
+        onToggleFavorite,
+        onRescan,
+        onOpenThemeManager,
+      }) => DataDrivenThemeEngine(
+        key: key,
+        state: state,
+        onSelectGame: onSelectGame,
+        onLaunchGame: onLaunchGame,
+        onOpenSettings: onOpenSettings,
+        onAddApps: onAddApps,
+        onToggleFavorite: onToggleFavorite,
+        onRescan: onRescan,
+        onOpenThemeManager: onOpenThemeManager,
+      ),
+    );
+  }
   if (!ThemeEngineRegistry.instance.hasEngine('wireframe_debug')) {
     ThemeEngineRegistry.instance.register(
       'wireframe_debug',
@@ -24,6 +52,7 @@ void registerDefaultThemes() {
         onAddApps,
         onToggleFavorite,
         onRescan,
+        onOpenThemeManager,
       }) => WireframeDebugTheme(
         key: key,
         state: state,
@@ -33,6 +62,7 @@ void registerDefaultThemes() {
         onAddApps: onAddApps,
         onToggleFavorite: onToggleFavorite,
         onRescan: onRescan,
+        onOpenThemeManager: onOpenThemeManager,
       ),
     );
   }
@@ -111,6 +141,7 @@ class _OndaDeckShell extends ConsumerWidget {
             onAddApps: () => _openManualAppPicker(context),
             onToggleFavorite: controller.toggleFavorite,
             onRescan: controller.refreshInstalledApps,
+            onOpenThemeManager: () => _openThemeManager(context),
           );
         },
       ),
@@ -125,6 +156,11 @@ class _OndaDeckShell extends ConsumerWidget {
   Future<void> _openSettings(BuildContext context) => showDialog<void>(
     context: context,
     builder: (_) => const _SettingsDialog(),
+  );
+
+  Future<void> _openThemeManager(BuildContext context) => showDialog<void>(
+    context: context,
+    builder: (_) => const ThemeManagerDialog(),
   );
 }
 
@@ -313,6 +349,18 @@ class _SettingsDialog extends ConsumerWidget {
                       children: [
                         _FocusableMenuRow(
                           autofocus: true,
+                          label: 'Gerenciar Temas & Editor de Cores',
+                          trailing: state.theme.name,
+                          onActivate: () {
+                            Navigator.of(context).pop();
+                            showDialog<void>(
+                              context: context,
+                              builder: (_) => const ThemeManagerDialog(),
+                            );
+                          },
+                        ),
+                        const SizedBox(height: 8),
+                        _FocusableMenuRow(
                           label: 'Importar jogos Android automaticamente',
                           trailing: settings.autoImportGames ? 'ON' : 'OFF',
                           onActivate: () => controller.updateSettings(

@@ -49,6 +49,7 @@ class LauncherPlugin(
         private const val REQ_PICK_DIRECTORY = 4101
         private const val REQ_PICK_FILE = 4102
         private const val MAX_TEXT_BYTES = 2 * 1024 * 1024
+        private const val MAX_ARCHIVE_BYTES = 64L * 1024L * 1024L
     }
 
     private var channel: MethodChannel? = null
@@ -140,6 +141,15 @@ class LauncherPlugin(
                     result.error("INVALID_ARGS", "uri is required.", null)
                 } else {
                     runAsync(result) { readText(uri) }
+                }
+            }
+            "copyDocumentToCache" -> {
+                val uri = call.argument<String>("uri")
+                val preferredName = call.argument<String>("preferredName")
+                if (uri.isNullOrBlank()) {
+                    result.error("INVALID_ARGS", "uri is required.", null)
+                } else {
+                    runAsync(result) { copyDocumentToCache(uri, preferredName) }
                 }
             }
             "getDeviceProfile" -> runAsync(result) { getDeviceProfile() }
@@ -709,6 +719,33 @@ class LauncherPlugin(
             }
         } ?: throw IllegalStateException("Cannot open text stream: $uriString")
         return buffer.toString(Charsets.UTF_8.name())
+    }
+
+    private fun copyDocumentToCache(uriString: String, preferredName: String?): String {
+        val uri = Uri.parse(uriString)
+        val rawName = preferredName?.takeIf { it.isNotBlank() } ?: "theme_import.ondatheme"
+        val safeName = rawName.replace(Regex("[^A-Za-z0-9._-]"), "_")
+        val dir = File(activity.cacheDir, "theme_imports").apply { mkdirs() }
+        val outFile = File(dir, "${System.currentTimeMillis()}_$safeName")
+
+        val chunk = ByteArray(16384)
+        var total = 0L
+        activity.contentResolver.openInputStream(uri)?.use { input ->
+            FileOutputStream(outFile).use { output ->
+                while (true) {
+                    val read = input.read(chunk)
+                    if (read <= 0) break
+                    total += read
+                    if (total > MAX_ARCHIVE_BYTES) {
+                        outFile.delete()
+                        throw IllegalArgumentException("Theme archive exceeds 64 MB limit.")
+                    }
+                    output.write(chunk, 0, read)
+                }
+            }
+        } ?: throw IllegalStateException("Cannot open document stream: $uriString")
+
+        return outFile.absolutePath
     }
 
     // ---- Hardware Profile --------------------------------------------------------

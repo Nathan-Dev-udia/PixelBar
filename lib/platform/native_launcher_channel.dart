@@ -197,6 +197,24 @@ class NativeLauncherChannel implements LauncherGateway {
   }
 
   @override
+  Future<String> copyDocumentToCache(
+    String uri, {
+    String? preferredName,
+  }) async {
+    final result = await _channel.invokeMethod<String>('copyDocumentToCache', {
+      'uri': uri,
+      'preferredName': ?preferredName,
+    });
+    if (result == null || result.isEmpty) {
+      throw PlatformException(
+        code: 'COPY_DOCUMENT_FAILED',
+        message: 'Unable to cache document from $uri',
+      );
+    }
+    return result;
+  }
+
+  @override
   Future<DeviceProfile> getDeviceProfile() async {
     try {
       final raw = await _channel.invokeMethod<Map<Object?, Object?>>(

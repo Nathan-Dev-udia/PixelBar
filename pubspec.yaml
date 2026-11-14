@@ -24,6 +24,7 @@ flutter:
 
   assets:
     - assets/themes/wireframe_debug/
+    - assets/themes/ps3_xmb/
 
   # Background shaders (GLSL .frag) are declared here; see ARCHITECTURE.md §4.3.
   shaders:

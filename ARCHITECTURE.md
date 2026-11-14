@@ -37,7 +37,8 @@ lib/
 │   │   ├── launcher_settings.dart# Preferências globais do usuário
 │   │   ├── library_state.dart    # Snapshot imutável entregue aos temas
 │   │   ├── platform_models.dart  # InstalledApp, SafEntry, PersistedUri, DeviceProfile, LaunchException
-│   │   └── theme_manifest.dart   # Schema v1 do theme.json (cores, background, áudio, opções)
+│   │   ├── theme_layout.dart     # AST declarativa (ThemeLayoutNode) e validação de assets relativos
+│   │   └── theme_manifest.dart   # Schema de manifesto de temas (manifest.json / theme.json + cores)
 │   ├── repositories/
 │   │   ├── game_library_repository.dart # Interface de persistência
 │   │   └── launcher_gateway.dart        # Interface da ponte nativa Android
@@ -54,15 +55,21 @@ lib/
 │   ├── sync/
 │   │   └── library_sync_service.dart # Sincronização de pacotes + extração de ícones em PNG
 │   └── theme/
-│       └── theme_manifest_loader.dart # Leitura de assets/SAF + parse em Isolate.run()
+│       ├── theme_manifest_loader.dart # Leitura de assets/SAF + parse em Isolate.run()
+│       ├── theme_package_service.dart # Instalação .zip/.ondatheme via SAF + user_overrides.json + FontLoader
+│       └── zip_archive_extractor.dart # Descompactador ZIP puro Dart com bloqueio de path traversal
 │
 ├── platform/
 │   └── native_launcher_channel.dart # Wrapper Dart do MethodChannel('com.ondapixel.ondadeck/launcher')
 │
 └── themes/                       # Camada visual 100% desacoplada
     ├── console_theme_widget.dart # Contrato abstrato ConsoleThemeWidget + ThemeEngineRegistry
+    ├── data_driven/
+    │   └── data_driven_theme_engine.dart # Motor declarativo (layout.json, bindings {{...}}, gamepad/D-Pad)
+    ├── manager/
+    │   └── theme_manager_screen.dart     # Gerenciador de Temas, importação SAF e editor HSV/Hex
     └── wireframe_debug/
-        └── wireframe_debug_theme.dart # Tema minimalista de diagnóstico/validação
+        └── wireframe_debug_theme.dart    # Tema minimalista de diagnóstico/validação
 ```
 
 Lado nativo Android (`android/app/src/main/kotlin/com/ondapixel/ondadeck/`):
@@ -84,7 +91,14 @@ A camada de temas é **100% passiva** em relação a dados e sistema operacional
   - `onAddApps()` — abertura do seletor manual de aplicativos instalados
   - `onToggleFavorite(GameItem)` — alternância de favorito
   - `onRescan()` — nova varredura de pacotes/biblioteca
-- O `ThemeEngineRegistry` mapeia o campo `engine` do `theme.json` (`wireframe_debug`, e futuramente `xmb`, `ps5`, etc.) para o respectivo construtor de `ConsoleThemeWidget`. Temas customizados via JSON reutilizam engines existentes alterando paleta, shader, áudio e `options`.
+- O `ThemeEngineRegistry` mapeia o campo `engine` do `manifest.json` (`data_driven` por padrão, além de engines nativos como `wireframe_debug`) para o respectivo construtor de `ConsoleThemeWidget`.
+
+### 3.1 Motor Declarativo de Temas (`DataDrivenThemeEngine`) & Pacotes da Comunidade
+- Pacotes `.zip` / `.ondatheme` são selecionados via Android SAF (`pickFile` + `copyDocumentToCache`), e **descompactados e validados obrigatoriamente dentro de `Isolate.run()`** (`ZipArchiveExtractor` + `ThemePackageService`) para `app_flutter/themes/<theme_id>/`.
+- **Segurança:** entradas contendo `..`, `\`, `:`, caminhos absolutos ou fuga de diretório são rejeitadas antes de escrever no disco; todos os assets referenciados em `manifest.json` e `layout.json` têm existência verificada no pacote extraído.
+- **Fontes Dinâmicas:** arquivos `.ttf` declarados ou descobertos em `fonts/` são registrados via `FontLoader` no carregamento do tema.
+- **Editor de Cores Não-Destrutivo:** customizações feitas pelo usuário na `ThemeManagerDialog` são gravadas em `user_overrides.json` dentro da pasta do tema, preservando `manifest.json` intacto para restauração instantânea.
+- **`DataDrivenThemeEngine`:** interpreta a árvore AST (`ThemeLayoutNode`) composta por `Stack`, `Row`, `Column`, `Positioned`, `Padding`, `Container`, `DynamicBackground` (shader GLSL, cor sólida ou hero banner com crossfade), `MediaCarousel` (`horizontal`/`vertical`/`crossbar`), `GameArtwork` (sempre via `BudgetImage` com `cacheWidth`/`cacheHeight`) e `MetadataText`, avaliando bindings `{{selectedGame.*}}`, `{{selectedCategory.*}}`, `{{library.*}}` e `{{theme.*}}`.
 
 ---
 

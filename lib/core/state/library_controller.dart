@@ -6,6 +6,7 @@ import '../../data/db/app_database.dart';
 import '../../data/repositories/sqflite_game_library_repository.dart';
 import '../../data/sync/library_sync_service.dart';
 import '../../data/theme/theme_manifest_loader.dart';
+import '../../data/theme/theme_package_service.dart';
 import '../../domain/models/game_item.dart';
 import '../../domain/models/launcher_settings.dart';
 import '../../domain/models/library_state.dart';
@@ -42,6 +43,10 @@ final themeManifestLoaderProvider = Provider<ThemeManifestLoader>(
   (ref) => ThemeManifestLoader(gateway: ref.watch(launcherGatewayProvider)),
 );
 
+final themePackageServiceProvider = Provider<ThemePackageService>(
+  (ref) => ThemePackageService(),
+);
+
 final libraryControllerProvider =
     NotifierProvider<LibraryController, LibraryState>(LibraryController.new);
 
@@ -54,6 +59,8 @@ class LibraryController extends Notifier<LibraryState> {
       ref.read(gameLibraryRepositoryProvider);
   LibrarySyncService get _syncService => ref.read(librarySyncServiceProvider);
   ThemeManifestLoader get _themeLoader => ref.read(themeManifestLoaderProvider);
+  ThemePackageService get _themePackageService =>
+      ref.read(themePackageServiceProvider);
 
   @override
   LibraryState build() {
@@ -111,9 +118,75 @@ class LibraryController extends Notifier<LibraryState> {
 
   Future<ThemeManifest> _loadThemeManifest(String themeId) async {
     try {
-      return await _themeLoader.loadAsset('assets/themes/$themeId/theme.json');
+      return await _themePackageService.loadTheme(themeId);
     } on Object {
-      return ThemeManifest.fallback;
+      try {
+        return await _themeLoader.loadAsset(
+          'assets/themes/$themeId/theme.json',
+        );
+      } on Object {
+        return ThemeManifest.fallback;
+      }
+    }
+  }
+
+  Future<List<ThemeManifest>> listThemes() =>
+      _themePackageService.listInstalledThemes();
+
+  Future<void> activateTheme(String themeId) async {
+    await updateSettings(state.settings.copyWith(activeThemeId: themeId));
+  }
+
+  Future<ThemeManifest?> importThemeFromSaf() async {
+    final picked = await _gateway.pickFile(
+      mimeTypes: const ['application/zip', 'application/octet-stream', '*/*'],
+    );
+    if (picked == null) return null;
+
+    final cachedArchive = await _gateway.copyDocumentToCache(
+      picked.uri,
+      preferredName: picked.name,
+    );
+    final imported = await _themePackageService.importThemePackage(
+      cachedArchive,
+    );
+    if (!ref.mounted) return imported;
+
+    final nextSettings = state.settings.copyWith(activeThemeId: imported.id);
+    await _repository.saveSettings(nextSettings);
+    if (!ref.mounted) return imported;
+
+    state = state.copyWith(settings: nextSettings, theme: imported);
+    return imported;
+  }
+
+  Future<void> saveThemeColorOverrides(
+    String themeId,
+    Map<String, int> overrides,
+  ) async {
+    final updated = await _themePackageService.saveColorOverrides(
+      themeId,
+      overrides,
+    );
+    if (!ref.mounted) return;
+    if (state.theme.id == themeId) {
+      state = state.copyWith(theme: updated);
+    }
+  }
+
+  Future<void> resetThemeColorOverrides(String themeId) async {
+    final reset = await _themePackageService.resetColorOverrides(themeId);
+    if (!ref.mounted) return;
+    if (state.theme.id == themeId) {
+      state = state.copyWith(theme: reset);
+    }
+  }
+
+  Future<void> deleteTheme(String themeId) async {
+    await _themePackageService.deleteImportedTheme(themeId);
+    if (!ref.mounted) return;
+    if (state.settings.activeThemeId == themeId) {
+      await activateTheme(ThemePackageService.builtInDefaultId);
     }
   }
 

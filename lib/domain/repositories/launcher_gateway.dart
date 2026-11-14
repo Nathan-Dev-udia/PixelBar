@@ -51,5 +51,9 @@ abstract interface class LauncherGateway {
   /// Reads a small UTF-8 text document (theme.json, gamelists). Max 2 MB.
   Future<String> readText(String uri);
 
+  /// Copies a SAF document URI (e.g. `.zip` / `.ondatheme`) to an app-private
+  /// cache file off the UI thread and returns its absolute file path.
+  Future<String> copyDocumentToCache(String uri, {String? preferredName});
+
   Future<DeviceProfile> getDeviceProfile();
 }

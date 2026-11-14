@@ -21,6 +21,7 @@ class WireframeDebugTheme extends ConsoleThemeWidget {
     super.onAddApps,
     super.onToggleFavorite,
     super.onRescan,
+    super.onOpenThemeManager,
   });
 
   @override

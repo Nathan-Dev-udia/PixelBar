@@ -38,9 +38,12 @@ class BudgetImage extends StatelessWidget {
     final p = path;
     if (p == null || p.isEmpty) return fallback;
     final dpr = MediaQuery.devicePixelRatioOf(context);
+    final ImageProvider provider = p.startsWith('assets/')
+        ? AssetImage(p)
+        : FileImage(File(p));
     return Image(
       image: ResizeImage(
-        FileImage(File(p)),
+        provider,
         width: decodeExtent(width, dpr),
         height: decodeExtent(height, dpr),
         policy: ResizeImagePolicy.fit,

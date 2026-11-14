@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "id": "wireframe_debug",
+  "name": "Onda Default (Wireframe)",
+  "author": "Onda Pixel",
+  "version": "1.0.0",
+  "description": "Tema built-in de referência movido pelo DataDrivenThemeEngine.",
+  "engine": "data_driven",
+  "colors": {
+    "primary": "#12161C",
+    "accent": "#00E5FF",
+    "background": "#0B0D10",
+    "surface": "#12161C",
+    "textPrimary": "#E6E6E6",
+    "textSecondary": "#7A8494",
+    "focusGlow": "#00E5FF",
+    "foreground": "#E6E6E6",
+    "muted": "#5A6270",
+    "favorite": "#FFC400",
+    "danger": "#FF5370"
+  },
+  "sounds": {
+    "enabled": false,
+    "volume": 0.0
+  },
+  "options": {
+    "tileWidth": 144,
+    "tileHeight": 144,
+    "iconSize": 72,
+    "showDebugPanel": true
+  }
+}

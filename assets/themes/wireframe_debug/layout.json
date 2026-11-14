@@ -1,0 +1,103 @@
+{
+  "type": "Stack",
+  "children": [
+    {
+      "type": "DynamicBackground",
+      "shader": "ps3_wave",
+      "color": "{{theme.background}}",
+      "secondaryColor": "{{theme.surface}}"
+    },
+    {
+      "type": "Padding",
+      "horizontal": 24,
+      "vertical": 14,
+      "child": {
+        "type": "Column",
+        "crossAxisAlignment": "stretch",
+        "children": [
+          {
+            "type": "Row",
+            "mainAxisAlignment": "spaceBetween",
+            "crossAxisAlignment": "center",
+            "children": [
+              {
+                "type": "MetadataText",
+                "text": "ONDADECK // {{selectedCategory.title}}",
+                "color": "{{theme.accent}}",
+                "fontSize": 15,
+                "fontWeight": "bold",
+                "letterSpacing": 1.4
+              },
+              {
+                "type": "MetadataText",
+                "text": "JOGOS: {{library.totalGames}}",
+                "color": "{{theme.textSecondary}}",
+                "fontSize": 12
+              }
+            ]
+          },
+          {
+            "type": "Padding",
+            "top": 14,
+            "bottom": 12,
+            "child": {
+              "type": "MediaCarousel",
+              "direction": "horizontal",
+              "itemAsset": "cover",
+              "itemWidth": 144,
+              "itemHeight": 144,
+              "spacing": 14,
+              "focusScale": 1.06
+            }
+          },
+          {
+            "type": "Container",
+            "padding": 14,
+            "color": "{{theme.primary}}",
+            "borderColor": "{{theme.focusGlow}}",
+            "borderWidth": 1,
+            "borderRadius": 8,
+            "child": {
+              "type": "Row",
+              "crossAxisAlignment": "center",
+              "children": [
+                {
+                  "type": "GameArtwork",
+                  "assetType": "cover",
+                  "width": 64,
+                  "height": 64,
+                  "borderRadius": 8
+                },
+                {
+                  "type": "Padding",
+                  "left": 14,
+                  "child": {
+                    "type": "Column",
+                    "crossAxisAlignment": "start",
+                    "children": [
+                      {
+                        "type": "MetadataText",
+                        "text": "{{selectedGame.title}}",
+                        "color": "{{theme.textPrimary}}",
+                        "fontSize": 18,
+                        "fontWeight": "bold",
+                        "maxLines": 1
+                      },
+                      {
+                        "type": "MetadataText",
+                        "text": "{{selectedGame.platform}} • {{selectedGame.kind}} • {{selectedGame.playCount}}x • Último: {{selectedGame.lastPlayed}}",
+                        "color": "{{theme.textSecondary}}",
+                        "fontSize": 12,
+                        "maxLines": 1
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

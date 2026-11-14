@@ -33,12 +33,13 @@ class _ShaderBackgroundState extends State<ShaderBackground>
   static final Map<String, Future<ui.FragmentProgram>> _programs = {};
 
   ui.FragmentShader? _shader;
-  late final Ticker _ticker = createTicker(_onTick);
+  late final Ticker _ticker;
   final ValueNotifier<double> _time = ValueNotifier(0);
 
   @override
   void initState() {
     super.initState();
+    _ticker = createTicker(_onTick);
     _loadProgram();
   }
 

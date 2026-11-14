@@ -2,12 +2,14 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 
-class ThemeManifestException implements Exception {
-  const ThemeManifestException(this.message);
-  final String message;
-  @override
-  String toString() => 'ThemeManifestException: $message';
-}
+import 'theme_layout.dart';
+
+export 'theme_layout.dart'
+    show
+        ThemeLayoutNode,
+        ThemeManifestException,
+        ThemeNodeType,
+        validateSafeRelativeAssetPath;
 
 enum BackgroundKind { solid, image, shader }
 
@@ -38,10 +40,14 @@ class BackgroundSpec {
     if (kind == null) {
       throw ThemeManifestException('Unknown background type: ${json['type']}');
     }
+    final rawImage = json['image'] as String?;
+    if (rawImage != null) {
+      validateSafeRelativeAssetPath(rawImage, context: 'background.image');
+    }
     final spec = BackgroundSpec(
       kind: kind,
       color: json['color'] == null ? 0xFF000000 : parseColor(json['color']),
-      imagePath: _resolvePath(json['image'] as String?, basePath),
+      imagePath: _resolvePath(rawImage, basePath),
       shaderAsset: json['shader'] as String?,
       uniforms: {
         for (final e in ((json['uniforms'] as Map?) ?? const {}).entries)
@@ -106,16 +112,48 @@ class AudioTheme {
   final String? backSfx;
   final String? launchSfx;
 
-  factory AudioTheme.fromJson(Map<String, Object?> json, {String? basePath}) =>
-      AudioTheme(
-        enabled: json['enabled'] as bool? ?? false,
-        volume: ((json['volume'] as num?) ?? 0.6).toDouble().clamp(0.0, 1.0),
-        backgroundMusic: _resolvePath(json['bgm'] as String?, basePath),
-        navigateSfx: _resolvePath(json['navigate'] as String?, basePath),
-        selectSfx: _resolvePath(json['select'] as String?, basePath),
-        backSfx: _resolvePath(json['back'] as String?, basePath),
-        launchSfx: _resolvePath(json['launch'] as String?, basePath),
-      );
+  List<String> get relativeOrResolvedPaths => [
+    ?backgroundMusic,
+    ?navigateSfx,
+    ?selectSfx,
+    ?backSfx,
+    ?launchSfx,
+  ];
+
+  factory AudioTheme.fromJson(Map<String, Object?> json, {String? basePath}) {
+    String? readPath(List<String> keys) {
+      for (final key in keys) {
+        final v = json[key];
+        if (v is String && v.isNotEmpty) {
+          validateSafeRelativeAssetPath(v, context: 'sounds.$key');
+          return _resolvePath(v, basePath);
+        }
+      }
+      return null;
+    }
+
+    final bgm = readPath(['bgm']);
+    final move = readPath(['navigate', 'move']);
+    final select = readPath(['select']);
+    final back = readPath(['back']);
+    final launch = readPath(['launch']);
+    final hasAny =
+        bgm != null ||
+        move != null ||
+        select != null ||
+        back != null ||
+        launch != null;
+
+    return AudioTheme(
+      enabled: json['enabled'] as bool? ?? hasAny,
+      volume: ((json['volume'] as num?) ?? 0.6).toDouble().clamp(0.0, 1.0),
+      backgroundMusic: bgm,
+      navigateSfx: move,
+      selectSfx: select,
+      backSfx: back,
+      launchSfx: launch,
+    );
+  }
 
   @override
   bool operator ==(Object other) =>
@@ -140,26 +178,31 @@ class AudioTheme {
   );
 }
 
-/// Declarative description of a theme (`theme.json`).
+/// Declarative description of a theme (`manifest.json` or legacy `theme.json`).
 ///
-/// [engine] selects which registered Dart renderer draws it (`wireframe_debug`,
-/// `xmb`, `ps5`, …). A JSON-only custom theme reuses an engine and only swaps
-/// colours, background, audio and [options].
+/// [engine] defaults to `'data_driven'` (`DataDrivenThemeEngine`), or may select
+/// a registered custom engine (`wireframe_debug`, etc.).
 @immutable
 class ThemeManifest {
   const ThemeManifest({
     required this.id,
     required this.name,
-    required this.engine,
+    this.engine = 'data_driven',
     this.schemaVersion = currentSchemaVersion,
     this.author = 'Unknown',
     this.version = '0.0.0',
+    this.description = '',
+    this.previewImage,
     this.colors = const {},
+    Map<String, int>? defaultColors,
     this.background = const BackgroundSpec(),
     this.audio = AudioTheme.silent,
     this.options = const {},
+    this.fonts = const {},
+    this.layout,
+    this.isBuiltIn = true,
     this.basePath,
-  });
+  }) : _defaultColors = defaultColors;
 
   static const currentSchemaVersion = 1;
 
@@ -175,18 +218,33 @@ class ThemeManifest {
   final String name;
   final String author;
   final String version;
+  final String description;
+  final String? previewImage;
   final String engine;
 
-  /// Named ARGB colours (`background`, `foreground`, `accent`, …).
+  /// Active ARGB colours (`primary`, `accent`, `background`, `textPrimary`, …).
   final Map<String, int> colors;
+  final Map<String, int>? _defaultColors;
   final BackgroundSpec background;
   final AudioTheme audio;
 
-  /// Free-form, engine-specific layout knobs (tile sizes, wave speed, …).
+  /// Free-form, engine-specific layout knobs.
   final Map<String, Object?> options;
 
-  /// Directory the manifest was loaded from; relative asset paths resolve here.
+  /// Font family name -> resolved `.ttf` path inside the theme package.
+  final Map<String, String> fonts;
+
+  /// Declarative widget tree loaded from `layout.json`.
+  final ThemeLayoutNode? layout;
+
+  final bool isBuiltIn;
+
+  /// Directory or asset prefix the manifest was loaded from.
   final String? basePath;
+
+  Map<String, int> get defaultColors => _defaultColors ?? colors;
+
+  bool get hasColorOverrides => !mapEquals(colors, defaultColors);
 
   int color(String key, int fallback) => colors[key] ?? fallback;
 
@@ -197,8 +255,54 @@ class ThemeManifest {
     return fallback;
   }
 
+  ThemeManifest copyWith({
+    Map<String, int>? colors,
+    Map<String, int>? defaultColors,
+    Map<String, String>? fonts,
+    ThemeLayoutNode? layout,
+    bool? isBuiltIn,
+    String? basePath,
+    String? previewImage,
+  }) => ThemeManifest(
+    schemaVersion: schemaVersion,
+    id: id,
+    name: name,
+    author: author,
+    version: version,
+    description: description,
+    previewImage: previewImage ?? this.previewImage,
+    engine: engine,
+    colors: Map.unmodifiable(colors ?? this.colors),
+    defaultColors: Map.unmodifiable(defaultColors ?? this.defaultColors),
+    background: background,
+    audio: audio,
+    options: options,
+    fonts: Map.unmodifiable(fonts ?? this.fonts),
+    layout: layout ?? this.layout,
+    isBuiltIn: isBuiltIn ?? this.isBuiltIn,
+    basePath: basePath ?? this.basePath,
+  );
+
+  /// Returns a copy with user color customizations overlaid onto [defaultColors].
+  ThemeManifest applyColorOverrides(Map<String, int> overrides) {
+    if (overrides.isEmpty) {
+      return copyWith(colors: defaultColors);
+    }
+    final merged = Map<String, int>.of(defaultColors);
+    for (final entry in overrides.entries) {
+      if (merged.containsKey(entry.key)) {
+        merged[entry.key] = entry.value;
+      }
+    }
+    return copyWith(colors: merged);
+  }
+
   /// Pure & synchronous: call it inside `Isolate.run`.
-  static ThemeManifest parse(String source, {String? basePath}) {
+  static ThemeManifest parse(
+    String source, {
+    String? basePath,
+    bool isBuiltIn = true,
+  }) {
     final Object? decoded;
     try {
       decoded = jsonDecode(source);
@@ -208,12 +312,17 @@ class ThemeManifest {
     if (decoded is! Map<String, Object?>) {
       throw const ThemeManifestException('Root must be a JSON object.');
     }
-    return ThemeManifest.fromJson(decoded, basePath: basePath);
+    return ThemeManifest.fromJson(
+      decoded,
+      basePath: basePath,
+      isBuiltIn: isBuiltIn,
+    );
   }
 
   factory ThemeManifest.fromJson(
     Map<String, Object?> json, {
     String? basePath,
+    bool isBuiltIn = true,
   }) {
     final schema = json['schemaVersion'] as int? ?? 1;
     if (schema > currentSchemaVersion) {
@@ -226,37 +335,81 @@ class ThemeManifest {
       if (v is! String || v.trim().isEmpty) {
         throw ThemeManifestException('Missing required "$key".');
       }
-      return v;
+      return v.trim();
     }
+
+    final rawPreview = json['previewImage'] as String?;
+    if (rawPreview != null && rawPreview.isNotEmpty) {
+      validateSafeRelativeAssetPath(rawPreview, context: 'previewImage');
+    }
+
+    final parsedColors = Map<String, int>.unmodifiable({
+      for (final e in ((json['colors'] as Map?) ?? const {}).entries)
+        '${e.key}': parseColor(e.value),
+    });
+
+    final rawAudio = json['sounds'] ?? json['audio'];
+    final parsedFonts = <String, String>{};
+    if (json['fonts'] case final Map rawFonts) {
+      for (final e in rawFonts.entries) {
+        final path = e.value;
+        if (path is String && path.isNotEmpty) {
+          validateSafeRelativeAssetPath(path, context: 'fonts.${e.key}');
+          parsedFonts['${e.key}'] = _resolvePath(path, basePath) ?? path;
+        }
+      }
+    }
+
+    final rawEngine = (json['engine'] as String?)?.trim();
+    final engine = (rawEngine != null && rawEngine.isNotEmpty)
+        ? rawEngine
+        : 'data_driven';
 
     return ThemeManifest(
       schemaVersion: schema,
       id: required('id'),
       name: required('name'),
-      engine: required('engine'),
-      author: json['author'] as String? ?? 'Unknown',
-      version: json['version'] as String? ?? '0.0.0',
-      colors: Map.unmodifiable({
-        for (final e in ((json['colors'] as Map?) ?? const {}).entries)
-          '${e.key}': parseColor(e.value),
-      }),
+      engine: engine,
+      author: (json['author'] as String?)?.trim().isNotEmpty == true
+          ? (json['author']! as String).trim()
+          : 'Unknown',
+      version: (json['version'] as String?)?.trim().isNotEmpty == true
+          ? (json['version']! as String).trim()
+          : '0.0.0',
+      description: json['description'] as String? ?? '',
+      previewImage: rawPreview == null || rawPreview.isEmpty
+          ? null
+          : _resolvePath(rawPreview, basePath),
+      colors: parsedColors,
+      defaultColors: parsedColors,
       background: json['background'] == null
           ? const BackgroundSpec()
           : BackgroundSpec.fromJson(
               (json['background'] as Map).cast<String, Object?>(),
               basePath: basePath,
             ),
-      audio: json['audio'] == null
+      audio: rawAudio == null
           ? AudioTheme.silent
           : AudioTheme.fromJson(
-              (json['audio'] as Map).cast<String, Object?>(),
+              (rawAudio as Map).cast<String, Object?>(),
               basePath: basePath,
             ),
       options: Map.unmodifiable(
         (json['options'] as Map?)?.cast<String, Object?>() ?? const {},
       ),
+      fonts: Map.unmodifiable(parsedFonts),
+      isBuiltIn: isBuiltIn,
       basePath: basePath,
     );
+  }
+
+  static String formatColorHex(int argb, {bool includeAlpha = false}) {
+    final alpha = (argb >> 24) & 0xFF;
+    if (includeAlpha || alpha != 0xFF) {
+      return '#${argb.toUnsigned(32).toRadixString(16).padLeft(8, '0').toUpperCase()}';
+    }
+    final rgb = argb & 0xFFFFFF;
+    return '#${rgb.toRadixString(16).padLeft(6, '0').toUpperCase()}';
   }
 
   @override
@@ -267,11 +420,17 @@ class ThemeManifest {
       other.name == name &&
       other.author == author &&
       other.version == version &&
+      other.description == description &&
+      other.previewImage == previewImage &&
       other.engine == engine &&
       mapEquals(other.colors, colors) &&
+      mapEquals(other.defaultColors, defaultColors) &&
       other.background == background &&
       other.audio == audio &&
       mapEquals(other.options, options) &&
+      mapEquals(other.fonts, fonts) &&
+      other.layout == layout &&
+      other.isBuiltIn == isBuiltIn &&
       other.basePath == basePath;
 
   @override
@@ -281,9 +440,13 @@ class ThemeManifest {
     name,
     author,
     version,
+    description,
+    previewImage,
     engine,
     background,
     audio,
+    layout,
+    isBuiltIn,
     basePath,
   );
 }
@@ -292,7 +455,9 @@ class ThemeManifest {
 int parseColor(Object? raw) {
   if (raw is int) return raw;
   if (raw is String) {
-    final hex = raw.startsWith('#') ? raw.substring(1) : raw;
+    final hex = raw.trim().startsWith('#')
+        ? raw.trim().substring(1)
+        : raw.trim();
     final value = int.tryParse(hex, radix: 16);
     if (value != null && hex.length == 6) return 0xFF000000 | value;
     if (value != null && hex.length == 8) return value;

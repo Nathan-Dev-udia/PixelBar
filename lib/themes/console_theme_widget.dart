@@ -18,6 +18,7 @@ abstract class ConsoleThemeWidget extends StatefulWidget {
     this.onAddApps,
     this.onToggleFavorite,
     this.onRescan,
+    this.onOpenThemeManager,
   });
 
   final LibraryState state;
@@ -27,6 +28,7 @@ abstract class ConsoleThemeWidget extends StatefulWidget {
   final VoidCallback? onAddApps;
   final ValueChanged<GameItem>? onToggleFavorite;
   final VoidCallback? onRescan;
+  final VoidCallback? onOpenThemeManager;
 }
 
 typedef ConsoleThemeBuilder =
@@ -39,6 +41,7 @@ typedef ConsoleThemeBuilder =
       VoidCallback? onAddApps,
       ValueChanged<GameItem>? onToggleFavorite,
       VoidCallback? onRescan,
+      VoidCallback? onOpenThemeManager,
     });
 
 /// Maps `ThemeManifest.engine` identifiers to concrete [ConsoleThemeWidget] builders.
@@ -69,6 +72,7 @@ final class ThemeEngineRegistry {
     VoidCallback? onAddApps,
     ValueChanged<GameItem>? onToggleFavorite,
     VoidCallback? onRescan,
+    VoidCallback? onOpenThemeManager,
   }) {
     final builder = _engines[engineId] ?? _engines[defaultEngineId];
     if (builder == null) {
@@ -85,6 +89,7 @@ final class ThemeEngineRegistry {
       onAddApps: onAddApps,
       onToggleFavorite: onToggleFavorite,
       onRescan: onRescan,
+      onOpenThemeManager: onOpenThemeManager,
     );
   }
 }

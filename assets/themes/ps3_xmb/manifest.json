@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "id": "ps3_xmb",
+  "name": "PS3 XMB (XrossMediaBar)",
+  "author": "Onda Pixel",
+  "version": "1.0.0",
+  "description": "Interface clássica inspirada no PlayStation 3 (XrossMediaBar) com barra cruzada de categorias e ondas dinâmicas.",
+  "engine": "data_driven",
+  "colors": {
+    "primary": "#0B224E",
+    "accent": "#78D8FF",
+    "background": "#050E24",
+    "surface": "#133B7E",
+    "textPrimary": "#F4F9FF",
+    "textSecondary": "#9BB8DF",
+    "focusGlow": "#FFFFFF",
+    "foreground": "#F4F9FF",
+    "muted": "#7A9CC6",
+    "favorite": "#FFD54F",
+    "danger": "#FF5370"
+  },
+  "sounds": {
+    "enabled": false,
+    "volume": 0.0
+  },
+  "options": {
+    "xmbMode": true,
+    "iconSize": 68
+  }
+}
