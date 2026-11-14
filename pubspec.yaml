@@ -24,6 +24,7 @@ flutter:
   uses-material-design: true
 
   assets:
+    - assets/icons/
     - assets/themes/wireframe_debug/
     - assets/themes/psp_xmb/
 
