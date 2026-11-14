@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 
 import '../../core/input/gamepad_input.dart';
@@ -9,6 +8,7 @@ import '../../domain/models/game_item.dart';
 import '../../domain/models/library_state.dart';
 import '../../domain/models/theme_manifest.dart';
 import '../console_theme_widget.dart';
+import 'ps3_xmb_view.dart';
 
 /// Declarative interpreter for community & built-in `layout.json` themes.
 ///
@@ -23,6 +23,7 @@ class DataDrivenThemeEngine extends ConsoleThemeWidget {
     required super.onLaunchGame,
     required super.onOpenSettings,
     super.onAddApps,
+    super.onRemoveGame,
     super.onToggleFavorite,
     super.onRescan,
     super.onOpenThemeManager,
@@ -350,22 +351,26 @@ class _DataDrivenThemeEngineState extends State<DataDrivenThemeEngine> {
                       _renderNode(rootNode, constraints.biggest, isRoot: true),
                 ),
               ),
-              _DataDrivenBottomBar(
-                themeName: manifest.name,
-                fgColor: fgColor,
-                mutedColor: mutedColor,
-                accentColor: accentColor,
-                surfaceColor: surfaceColor,
-                hasSelectedGame: selected != null,
-                onAddApps: widget.onAddApps,
-                onToggleFavorite:
-                    selected == null || widget.onToggleFavorite == null
-                    ? null
-                    : () => widget.onToggleFavorite!(selected),
-                onRescan: widget.onRescan,
-                onOpenThemeManager: widget.onOpenThemeManager,
-                onOpenSettings: widget.onOpenSettings,
-              ),
+              if (!manifest.option<bool>('xmbMode', false))
+                _DataDrivenBottomBar(
+                  themeName: manifest.name,
+                  fgColor: fgColor,
+                  mutedColor: mutedColor,
+                  accentColor: accentColor,
+                  surfaceColor: surfaceColor,
+                  hasSelectedGame: selected != null,
+                  onAddApps: widget.onAddApps,
+                  onRemoveGame: selected == null || widget.onRemoveGame == null
+                      ? null
+                      : () => widget.onRemoveGame!(selected),
+                  onToggleFavorite:
+                      selected == null || widget.onToggleFavorite == null
+                      ? null
+                      : () => widget.onToggleFavorite!(selected),
+                  onRescan: widget.onRescan,
+                  onOpenThemeManager: widget.onOpenThemeManager,
+                  onOpenSettings: widget.onOpenSettings,
+                ),
             ],
           ),
         ),
@@ -667,6 +672,77 @@ class _DataDrivenThemeEngineState extends State<DataDrivenThemeEngine> {
       );
     }
 
+    final isVertical = direction == 'vertical';
+    final isCrossbar = direction == 'crossbar';
+
+    if (isCrossbar) {
+      final glowColor = _resolveColor(
+        null,
+        manifest,
+        accentColor,
+        tokenFallback: 'focusGlow',
+        secondaryToken: 'accent',
+      );
+      final brandAccent = _resolveColor(
+        null,
+        manifest,
+        accentColor,
+        tokenFallback: 'accent',
+      );
+      final surfacePanelColor = _resolveColor(
+        null,
+        manifest,
+        surfaceColor,
+        tokenFallback: 'surface',
+        secondaryToken: 'primary',
+      );
+      return LayoutBuilder(
+        builder: (context, constraints) {
+          final resolvedHeight =
+              explicitHeight ??
+              (constraints.hasBoundedHeight
+                  ? constraints.maxHeight
+                  : viewport.height);
+          return SizedBox(
+            width: explicitWidth ?? double.infinity,
+            height: resolvedHeight,
+            child: Ps3XmbView(
+              categories: _categories,
+              categoryIndex: _categoryIndex,
+              selectedGame: _selectedGame,
+              totalGames: widget.state.totalGames,
+              themeName: manifest.name,
+              nodeForGame: _nodeFor,
+              emptyAddNode: _emptyAddNode,
+              emptyRescanNode: _emptyRescanNode,
+              onSelectCategory: _selectCategoryAt,
+              onSwitchCategory: _switchCategory,
+              onSelectGame: (game) {
+                if (_activeGameId != game.id) {
+                  setState(() => _activeGameId = game.id);
+                }
+                widget.onSelectGame(game);
+              },
+              onLaunchGame: widget.onLaunchGame,
+              onOpenSettings: widget.onOpenSettings,
+              onAddApps: widget.onAddApps,
+              onRemoveGame: widget.onRemoveGame,
+              onToggleFavorite: widget.onToggleFavorite,
+              onRescan: widget.onRescan,
+              onOpenThemeManager: widget.onOpenThemeManager,
+              itemAsset: itemAsset,
+              accentColor: brandAccent,
+              glowColor: glowColor,
+              surfaceColor: surfacePanelColor,
+              fgColor: fgColor,
+              mutedColor: mutedColor,
+              favoriteColor: favoriteColor,
+            ),
+          );
+        },
+      );
+    }
+
     final cat = _activeCategory;
     if (cat == null || cat.games.isEmpty) {
       return SizedBox(
@@ -698,42 +774,6 @@ class _DataDrivenThemeEngineState extends State<DataDrivenThemeEngine> {
             ],
           ),
         ),
-      );
-    }
-
-    final isVertical = direction == 'vertical';
-    final isCrossbar = direction == 'crossbar';
-
-    if (isCrossbar) {
-      final glowColor = _resolveColor(
-        null,
-        manifest,
-        accentColor,
-        tokenFallback: 'focusGlow',
-        secondaryToken: 'accent',
-      );
-      final brandAccent = _resolveColor(
-        null,
-        manifest,
-        accentColor,
-        tokenFallback: 'accent',
-      );
-      return _buildPs3XmbCrossbar(
-        cat: cat,
-        viewport: viewport,
-        itemAsset: itemAsset,
-        itemWidth: itemWidth,
-        itemHeight: itemHeight,
-        spacing: spacing,
-        focusScale: focusScale,
-        explicitWidth: explicitWidth,
-        explicitHeight: explicitHeight,
-        surfaceColor: surfaceColor,
-        fgColor: fgColor,
-        mutedColor: mutedColor,
-        accentColor: brandAccent,
-        glowColor: glowColor,
-        favoriteColor: favoriteColor,
       );
     }
 
@@ -784,169 +824,6 @@ class _DataDrivenThemeEngineState extends State<DataDrivenThemeEngine> {
       width: explicitWidth ?? double.infinity,
       height: explicitHeight ?? (isVertical ? 260 : itemHeight + 60),
       child: list,
-    );
-  }
-
-  Widget _buildPs3XmbCrossbar({
-    required GameCategory cat,
-    required Size viewport,
-    required String itemAsset,
-    required double itemWidth,
-    required double itemHeight,
-    required double spacing,
-    required double focusScale,
-    required double? explicitWidth,
-    required double? explicitHeight,
-    required Color surfaceColor,
-    required Color fgColor,
-    required Color mutedColor,
-    required Color accentColor,
-    required Color glowColor,
-    required Color favoriteColor,
-  }) {
-    final thumbSize = itemWidth.clamp(52.0, 92.0);
-    final selectedGame = _selectedGame;
-    final showPreview = viewport.width >= 560 && selectedGame != null;
-
-    final spine = Focus(
-      canRequestFocus: false,
-      skipTraversal: true,
-      onKeyEvent: (_, event) {
-        if (event is KeyDownEvent || event is KeyRepeatEvent) {
-          if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
-            _switchCategory(-1);
-            return KeyEventResult.handled;
-          }
-          if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
-            _switchCategory(1);
-            return KeyEventResult.handled;
-          }
-        }
-        return KeyEventResult.ignored;
-      },
-      child: FocusTraversalGroup(
-        policy: OrderedTraversalPolicy(),
-        child: ListView.separated(
-          scrollDirection: Axis.vertical,
-          padding: const EdgeInsets.only(right: 8, top: 4, bottom: 8),
-          itemCount: cat.games.length,
-          separatorBuilder: (_, _) => SizedBox(height: spacing),
-          itemBuilder: (context, index) {
-            final game = cat.games[index];
-            return FocusTraversalOrder(
-              order: NumericFocusOrder(index.toDouble()),
-              child: _XmbSpineGameRow(
-                game: game,
-                focusNode: _nodeFor(game),
-                isSelected: _activeGameId == game.id,
-                thumbSize: thumbSize,
-                itemAsset: itemAsset,
-                focusScale: focusScale,
-                surfaceColor: surfaceColor,
-                fgColor: fgColor,
-                mutedColor: mutedColor,
-                accentColor: accentColor,
-                glowColor: glowColor,
-                favoriteColor: favoriteColor,
-                onFocused: () {
-                  if (_activeGameId != game.id) {
-                    setState(() => _activeGameId = game.id);
-                  }
-                  widget.onSelectGame(game);
-                },
-                onActivate: () => widget.onLaunchGame(game),
-              ),
-            );
-          },
-        ),
-      ),
-    );
-
-    final content = Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        SizedBox(
-          height: 88,
-          child: Stack(
-            children: [
-              Positioned(
-                top: 25,
-                left: 0,
-                right: 0,
-                child: Container(
-                  height: 1.5,
-                  color: glowColor.withValues(alpha: 0.22),
-                ),
-              ),
-              ExcludeFocus(
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(horizontal: 4),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      for (var i = 0; i < _categories.length; i++)
-                        Padding(
-                          padding: const EdgeInsets.only(right: 18),
-                          child: _XmbCategoryNode(
-                            category: _categories[i],
-                            active: i == _categoryIndex,
-                            fgColor: fgColor,
-                            mutedColor: mutedColor,
-                            accentColor: accentColor,
-                            glowColor: glowColor,
-                            surfaceColor: surfaceColor,
-                            onTap: () => _selectCategoryAt(i),
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 6),
-        Expanded(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Expanded(flex: 6, child: spine),
-              if (showPreview) ...[
-                const SizedBox(width: 20),
-                Expanded(
-                  flex: 5,
-                  child: _XmbGamePreviewCard(
-                    game: selectedGame,
-                    surfaceColor: surfaceColor,
-                    fgColor: fgColor,
-                    mutedColor: mutedColor,
-                    accentColor: accentColor,
-                    glowColor: glowColor,
-                    favoriteColor: favoriteColor,
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ),
-      ],
-    );
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final fallbackHeight = itemHeight + 240;
-        final targetHeight =
-            explicitHeight ??
-            (constraints.hasBoundedHeight
-                ? constraints.maxHeight
-                : fallbackHeight);
-        return SizedBox(
-          width: explicitWidth ?? double.infinity,
-          height: targetHeight,
-          child: content,
-        );
-      },
     );
   }
 
@@ -1375,6 +1252,7 @@ class _DataDrivenBottomBar extends StatelessWidget {
     required this.surfaceColor,
     required this.hasSelectedGame,
     required this.onAddApps,
+    required this.onRemoveGame,
     required this.onToggleFavorite,
     required this.onRescan,
     required this.onOpenThemeManager,
@@ -1388,6 +1266,7 @@ class _DataDrivenBottomBar extends StatelessWidget {
   final Color surfaceColor;
   final bool hasSelectedGame;
   final VoidCallback? onAddApps;
+  final VoidCallback? onRemoveGame;
   final VoidCallback? onToggleFavorite;
   final VoidCallback? onRescan;
   final VoidCallback? onOpenThemeManager;
@@ -1436,6 +1315,14 @@ class _DataDrivenBottomBar extends StatelessWidget {
                     accentColor: accentColor,
                     fgColor: fgColor,
                     onTap: onToggleFavorite,
+                  ),
+                if (onRemoveGame != null)
+                  _HudHint(
+                    keyLabel: 'DEL',
+                    label: 'Retirar',
+                    accentColor: accentColor,
+                    fgColor: fgColor,
+                    onTap: onRemoveGame,
                   ),
                 _HudHint(
                   keyLabel: 'L1/R1',
@@ -1601,470 +1488,6 @@ class _ActionPillState extends State<_ActionPill> {
             ],
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _XmbCategoryNode extends StatelessWidget {
-  const _XmbCategoryNode({
-    required this.category,
-    required this.active,
-    required this.fgColor,
-    required this.mutedColor,
-    required this.accentColor,
-    required this.glowColor,
-    required this.surfaceColor,
-    required this.onTap,
-  });
-
-  final GameCategory category;
-  final bool active;
-  final Color fgColor;
-  final Color mutedColor;
-  final Color accentColor;
-  final Color glowColor;
-  final Color surfaceColor;
-  final VoidCallback onTap;
-
-  IconData _iconForKind(CategoryKind kind) => switch (kind) {
-    CategoryKind.recent => Icons.schedule_rounded,
-    CategoryKind.favorites => Icons.star_rounded,
-    CategoryKind.recomp => Icons.memory_rounded,
-    CategoryKind.android => Icons.android_rounded,
-    CategoryKind.emulated => Icons.videogame_asset_rounded,
-    CategoryKind.custom => Icons.folder_special_rounded,
-  };
-
-  @override
-  Widget build(BuildContext context) {
-    final size = active ? 48.0 : 40.0;
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedOpacity(
-        opacity: active ? 1.0 : 0.65,
-        duration: const Duration(milliseconds: 140),
-        child: SizedBox(
-          width: 104,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              AnimatedContainer(
-                duration: const Duration(milliseconds: 150),
-                width: size,
-                height: size,
-                decoration: BoxDecoration(
-                  color: active
-                      ? surfaceColor.withValues(alpha: 0.92)
-                      : surfaceColor.withValues(alpha: 0.45),
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: active
-                        ? glowColor.withValues(alpha: 0.95)
-                        : mutedColor.withValues(alpha: 0.35),
-                    width: active ? 2.0 : 1.0,
-                  ),
-                  boxShadow: active
-                      ? [
-                          BoxShadow(
-                            color: accentColor.withValues(alpha: 0.55),
-                            blurRadius: 16,
-                            spreadRadius: 1,
-                          ),
-                        ]
-                      : null,
-                ),
-                child: Icon(
-                  _iconForKind(category.kind),
-                  size: active ? 25 : 20,
-                  color: active ? glowColor : mutedColor,
-                ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                category.title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: active ? fgColor : mutedColor,
-                  fontSize: active ? 12 : 11,
-                  fontWeight: active ? FontWeight.bold : FontWeight.w500,
-                ),
-              ),
-              Text(
-                '${category.games.length}',
-                maxLines: 1,
-                style: TextStyle(
-                  color: active
-                      ? accentColor
-                      : mutedColor.withValues(alpha: 0.8),
-                  fontSize: 10,
-                  fontFamily: 'monospace',
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _XmbSpineGameRow extends StatefulWidget {
-  const _XmbSpineGameRow({
-    required this.game,
-    required this.focusNode,
-    required this.isSelected,
-    required this.thumbSize,
-    required this.itemAsset,
-    required this.focusScale,
-    required this.surfaceColor,
-    required this.fgColor,
-    required this.mutedColor,
-    required this.accentColor,
-    required this.glowColor,
-    required this.favoriteColor,
-    required this.onFocused,
-    required this.onActivate,
-  });
-
-  final GameItem game;
-  final FocusNode focusNode;
-  final bool isSelected;
-  final double thumbSize;
-  final String itemAsset;
-  final double focusScale;
-  final Color surfaceColor;
-  final Color fgColor;
-  final Color mutedColor;
-  final Color accentColor;
-  final Color glowColor;
-  final Color favoriteColor;
-  final VoidCallback onFocused;
-  final VoidCallback onActivate;
-
-  @override
-  State<_XmbSpineGameRow> createState() => _XmbSpineGameRowState();
-}
-
-class _XmbSpineGameRowState extends State<_XmbSpineGameRow> {
-  bool _hasFocus = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final highlighted = _hasFocus || widget.isSelected;
-    final artPath = switch (widget.itemAsset) {
-      'banner' =>
-        widget.game.media.bannerPath ??
-            widget.game.media.coverPath ??
-            widget.game.media.iconPath,
-      'icon' => widget.game.media.iconPath,
-      'clearLogo' => widget.game.media.logoPath ?? widget.game.media.iconPath,
-      _ => widget.game.media.coverPath ?? widget.game.media.iconPath,
-    };
-
-    return FocusableActionDetector(
-      focusNode: widget.focusNode,
-      onFocusChange: (focused) {
-        if (_hasFocus != focused) {
-          setState(() => _hasFocus = focused);
-        }
-        if (focused) {
-          widget.onFocused();
-          Scrollable.ensureVisible(
-            context,
-            alignment: 0.35,
-            duration: const Duration(milliseconds: 140),
-            curve: Curves.easeOut,
-          );
-        }
-      },
-      actions: {
-        ActivateIntent: CallbackAction<ActivateIntent>(
-          onInvoke: (_) {
-            widget.onActivate();
-            return null;
-          },
-        ),
-      },
-      child: GestureDetector(
-        onTap: () {
-          widget.focusNode.requestFocus();
-          widget.onActivate();
-        },
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 130),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: BoxDecoration(
-            color: _hasFocus
-                ? widget.surfaceColor.withValues(alpha: 0.72)
-                : (highlighted
-                      ? widget.surfaceColor.withValues(alpha: 0.36)
-                      : Colors.transparent),
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(
-              color: _hasFocus
-                  ? widget.glowColor.withValues(alpha: 0.85)
-                  : (highlighted
-                        ? widget.accentColor.withValues(alpha: 0.4)
-                        : Colors.transparent),
-              width: _hasFocus ? 1.6 : 1.0,
-            ),
-            boxShadow: _hasFocus
-                ? [
-                    BoxShadow(
-                      color: widget.accentColor.withValues(alpha: 0.25),
-                      blurRadius: 14,
-                    ),
-                  ]
-                : null,
-          ),
-          child: Row(
-            children: [
-              Transform.scale(
-                scale: _hasFocus ? widget.focusScale.clamp(1.0, 1.12) : 1.0,
-                child: Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    Container(
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(
-                          color: _hasFocus
-                              ? widget.glowColor
-                              : widget.mutedColor.withValues(alpha: 0.35),
-                          width: _hasFocus ? 1.8 : 1.0,
-                        ),
-                        boxShadow: _hasFocus
-                            ? [
-                                BoxShadow(
-                                  color: widget.glowColor.withValues(
-                                    alpha: 0.35,
-                                  ),
-                                  blurRadius: 10,
-                                ),
-                              ]
-                            : null,
-                      ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(9),
-                        child: BudgetImage.file(
-                          artPath,
-                          width: widget.thumbSize,
-                          height: widget.thumbSize,
-                          placeholder: Container(
-                            width: widget.thumbSize,
-                            height: widget.thumbSize,
-                            color: widget.surfaceColor.withValues(alpha: 0.8),
-                            child: Icon(
-                              switch (widget.game.kind) {
-                                GameKind.recompPort => Icons.memory,
-                                GameKind.emulated => Icons.videogame_asset,
-                                GameKind.androidNative => Icons.android,
-                              },
-                              size: widget.thumbSize * 0.5,
-                              color: _hasFocus
-                                  ? widget.glowColor
-                                  : widget.mutedColor,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                    if (widget.game.favorite)
-                      Positioned(
-                        top: -4,
-                        right: -4,
-                        child: Icon(
-                          Icons.star,
-                          size: 16,
-                          color: widget.favoriteColor,
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      widget.game.title,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: _hasFocus ? widget.glowColor : widget.fgColor,
-                        fontSize: _hasFocus ? 16 : 14,
-                        fontWeight: _hasFocus
-                            ? FontWeight.bold
-                            : FontWeight.w500,
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      '${widget.game.platform.toUpperCase()} • ${widget.game.kind.name.toUpperCase()} • ${widget.game.playCount}x',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: _hasFocus
-                            ? widget.accentColor
-                            : widget.mutedColor,
-                        fontSize: 11,
-                        fontFamily: 'monospace',
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              if (_hasFocus)
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: widget.accentColor.withValues(alpha: 0.2),
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(color: widget.accentColor),
-                  ),
-                  child: Text(
-                    'A',
-                    style: TextStyle(
-                      color: widget.glowColor,
-                      fontFamily: 'monospace',
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _XmbGamePreviewCard extends StatelessWidget {
-  const _XmbGamePreviewCard({
-    required this.game,
-    required this.surfaceColor,
-    required this.fgColor,
-    required this.mutedColor,
-    required this.accentColor,
-    required this.glowColor,
-    required this.favoriteColor,
-  });
-
-  final GameItem game;
-  final Color surfaceColor;
-  final Color fgColor;
-  final Color mutedColor;
-  final Color accentColor;
-  final Color glowColor;
-  final Color favoriteColor;
-
-  @override
-  Widget build(BuildContext context) {
-    final previewArt =
-        game.media.bannerPath ??
-        game.media.backgroundPath ??
-        game.media.coverPath ??
-        game.media.iconPath;
-    final lastPlayed =
-        game.lastPlayedAt?.toLocal().toString().substring(0, 16) ?? 'Nunca';
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: surfaceColor.withValues(alpha: 0.42),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: glowColor.withValues(alpha: 0.28)),
-      ),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final artWidth = constraints.maxWidth.clamp(120.0, 480.0);
-          final artHeight = (constraints.maxHeight * 0.45).clamp(72.0, 190.0);
-          return SingleChildScrollView(
-            physics: const ClampingScrollPhysics(),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
-                  child: BudgetImage.file(
-                    previewArt,
-                    width: artWidth,
-                    height: artHeight,
-                    fit: BoxFit.cover,
-                    placeholder: Container(
-                      width: artWidth,
-                      height: artHeight,
-                      color: surfaceColor.withValues(alpha: 0.6),
-                      child: Icon(
-                        switch (game.kind) {
-                          GameKind.recompPort => Icons.memory_rounded,
-                          GameKind.emulated => Icons.videogame_asset_rounded,
-                          GameKind.androidNative => Icons.android_rounded,
-                        },
-                        size: 56,
-                        color: accentColor.withValues(alpha: 0.75),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        game.title,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: glowColor,
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                    if (game.favorite)
-                      Icon(Icons.star, size: 18, color: favoriteColor),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  '${game.platform.toUpperCase()} • ${game.kind.name.toUpperCase()}',
-                  style: TextStyle(
-                    color: accentColor,
-                    fontFamily: 'monospace',
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Sessões: ${game.playCount}x  •  Última sessão: $lastPlayed',
-                  style: TextStyle(color: mutedColor, fontSize: 12),
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  '[A] Iniciar',
-                  style: TextStyle(
-                    color: fgColor,
-                    fontFamily: 'monospace',
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ],
-            ),
-          );
-        },
       ),
     );
   }

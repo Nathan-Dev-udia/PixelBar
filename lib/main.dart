@@ -24,6 +24,7 @@ void registerDefaultThemes() {
         required onLaunchGame,
         required onOpenSettings,
         onAddApps,
+        onRemoveGame,
         onToggleFavorite,
         onRescan,
         onOpenThemeManager,
@@ -34,6 +35,7 @@ void registerDefaultThemes() {
         onLaunchGame: onLaunchGame,
         onOpenSettings: onOpenSettings,
         onAddApps: onAddApps,
+        onRemoveGame: onRemoveGame,
         onToggleFavorite: onToggleFavorite,
         onRescan: onRescan,
         onOpenThemeManager: onOpenThemeManager,
@@ -50,6 +52,7 @@ void registerDefaultThemes() {
         required onLaunchGame,
         required onOpenSettings,
         onAddApps,
+        onRemoveGame,
         onToggleFavorite,
         onRescan,
         onOpenThemeManager,
@@ -60,6 +63,7 @@ void registerDefaultThemes() {
         onLaunchGame: onLaunchGame,
         onOpenSettings: onOpenSettings,
         onAddApps: onAddApps,
+        onRemoveGame: onRemoveGame,
         onToggleFavorite: onToggleFavorite,
         onRescan: onRescan,
         onOpenThemeManager: onOpenThemeManager,
@@ -139,6 +143,7 @@ class _OndaDeckShell extends ConsumerWidget {
             onLaunchGame: controller.launchGame,
             onOpenSettings: () => _openSettings(context),
             onAddApps: () => _openManualAppPicker(context),
+            onRemoveGame: controller.removeGame,
             onToggleFavorite: controller.toggleFavorite,
             onRescan: controller.refreshInstalledApps,
             onOpenThemeManager: () => _openThemeManager(context),
@@ -187,6 +192,12 @@ class _ManualAppPickerDialogState
 
   @override
   Widget build(BuildContext context) {
+    final libraryState = ref.watch(libraryControllerProvider);
+    final existingById = <String, GameItem>{
+      for (final c in libraryState.categories)
+        for (final g in c.games) g.id: g,
+    };
+
     return Actions(
       actions: {
         GamepadBackIntent: CallbackAction<GamepadBackIntent>(
@@ -263,16 +274,32 @@ class _ManualAppPickerDialogState
                         separatorBuilder: (_, _) => const SizedBox(height: 6),
                         itemBuilder: (context, index) {
                           final app = apps[index];
+                          final existing =
+                              existingById[GameItem.idForPackage(
+                                app.packageName,
+                              )];
+                          final isAdded = existing != null;
                           return _FocusableMenuRow(
                             label: app.label,
-                            subtitle:
-                                '${app.packageName}${app.isGame ? ' • GAME' : ''}',
-                            trailing: 'Adicionar [A]',
+                            subtitle: isAdded
+                                ? '${app.packageName} • ADICIONADO'
+                                : '${app.packageName}${app.isGame ? ' • GAME' : ''}',
+                            trailing: isAdded ? 'Retirar [A]' : 'Adicionar [A]',
                             onActivate: () async {
-                              await ref
-                                  .read(libraryControllerProvider.notifier)
-                                  .addManualApp(app, kind: _selectedKind);
-                              if (context.mounted) Navigator.of(context).pop();
+                              final notifier = ref.read(
+                                libraryControllerProvider.notifier,
+                              );
+                              if (isAdded) {
+                                await notifier.removeGame(existing);
+                              } else {
+                                await notifier.addManualApp(
+                                  app,
+                                  kind: _selectedKind,
+                                );
+                                if (context.mounted) {
+                                  Navigator.of(context).pop();
+                                }
+                              }
                             },
                           );
                         },

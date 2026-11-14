@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "id": "psp_xmb",
+  "name": "PSP XMB (PlayStation Portable)",
+  "author": "Onda Pixel",
+  "version": "1.0.0",
+  "description": "Interface portátil clássica do PSP com barra XMB horizontal, indicador Memory Stick™, miniaturas ICON0 16:9, bateria de 3 barras e ondas de seda.",
+  "engine": "data_driven",
+  "colors": {
+    "primary": "#0A2B5E",
+    "accent": "#7AD7FF",
+    "background": "#1B75B0",
+    "surface": "#061C46",
+    "textPrimary": "#FFFFFF",
+    "textSecondary": "#C4E0FA",
+    "focusGlow": "#FFFFFF",
+    "foreground": "#FFFFFF",
+    "muted": "#8EB4DC",
+    "favorite": "#FFD54F",
+    "danger": "#FF5370"
+  },
+  "sounds": {
+    "enabled": false,
+    "volume": 0.0
+  },
+  "options": {
+    "xmbMode": true,
+    "pspMode": true,
+    "iconSize": 72
+  }
+}

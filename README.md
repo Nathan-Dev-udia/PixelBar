@@ -12,7 +12,7 @@
   - Suporte moderno ao **Storage Access Framework (SAF)** (`takePersistableUriPermission`) compatível com Android 13+ sem permissões legadas bloqueadas.
   - Lançamento universal (`launchTarget`) para APKs nativos e `Intent` com `ClipData`, permissões temporárias de URI e `extras` fortemente tipados para emuladores.
 - **Navegação 100% Gamepad-First:** operação completa via D-Pad, analógico esquerdo (mapeado nativamente em Kotlin com deadzone e histerese) e botões A/B/X/Y/L1/R1/START/SELECT, mantendo suporte secundário por toque.
-- **Motor de Temas Data-Driven (`DataDrivenThemeEngine`):** temas importáveis via `.zip` ou `.ondatheme` sem recompilar o aplicativo. O app já inclui dois layouts built-in no menu: `wireframe_debug` (*Onda Default*) e `ps3_xmb` (*PS3 XMB - XrossMediaBar*, inspirado na barra cruzada clássica do PlayStation 3 com espinha vertical de jogos, barra horizontal de categorias, painel de destaque e ondas dinâmicas).
+- **Motor de Temas Data-Driven (`DataDrivenThemeEngine`):** temas importáveis via `.zip` ou `.ondatheme` sem recompilar o aplicativo. O app já inclui dois layouts built-in no menu: `wireframe_debug` (*Onda Default*) e `psp_xmb` (*PSP XMB - PlayStation Portable*, com barra horizontal superior em estilo XMB, indicador *Memory Stick™*, miniaturas 16:9 `ICON0`, bateria de 3 barras e ondas de seda).
 - **Gerenciador de Temas & Editor de Cores:** instale pacotes da comunidade, troque de tema instantaneamente, personalize qualquer token de cor por HSV / Paleta Rápida / Hexadecimal (salvos em `user_overrides.json`) e restaure o padrão original a qualquer momento.
 
 ---

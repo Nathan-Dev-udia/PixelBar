@@ -1,0 +1,20 @@
+{
+  "type": "Stack",
+  "children": [
+    {
+      "type": "DynamicBackground",
+      "shader": "ps3_wave",
+      "color": "{{theme.background}}",
+      "secondaryColor": "{{theme.surface}}"
+    },
+    {
+      "type": "MediaCarousel",
+      "direction": "crossbar",
+      "itemAsset": "cover",
+      "itemWidth": 144,
+      "itemHeight": 80,
+      "spacing": 8,
+      "focusScale": 1.06
+    }
+  ]
+}

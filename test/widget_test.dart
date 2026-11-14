@@ -518,8 +518,9 @@ void main() {
         final installed = await service.listInstalledThemes();
         expect(
           installed.map((t) => t.id),
-          containsAll(['wireframe_debug', 'ps3_xmb', 'neon_arcade']),
+          containsAll(['wireframe_debug', 'psp_xmb', 'neon_arcade']),
         );
+        expect(installed.any((t) => t.id == 'ps3_xmb'), isFalse);
 
         final overridden = await service.saveColorOverrides('neon_arcade', {
           'accent': 0xFFFF5370,
@@ -535,7 +536,7 @@ void main() {
           throwsA(isA<ThemeManifestException>()),
         );
         await expectLater(
-          service.deleteImportedTheme('ps3_xmb'),
+          service.deleteImportedTheme('psp_xmb'),
           throwsA(isA<ThemeManifestException>()),
         );
 
@@ -717,10 +718,31 @@ void main() {
         await tester.pump();
         if (container.read(libraryControllerProvider).theme.id ==
                 'retro_deck' &&
-            find.text('Retro Deck').evaluate().isNotEmpty) {
+            find
+                .text('Tema "Retro Deck" importado e ativado!')
+                .evaluate()
+                .isNotEmpty &&
+            find.byType(LinearProgressIndicator).evaluate().isEmpty &&
+            find.byType(CircularProgressIndicator).evaluate().isEmpty) {
+          await tester.runAsync(
+            () => Future<void>.delayed(const Duration(milliseconds: 250)),
+          );
+          await tester.pump();
           break;
         }
       }
+      await tester.pumpAndSettle();
+
+      await tester.scrollUntilVisible(
+        find.text('Retro Deck'),
+        120,
+        scrollable: find
+            .descendant(
+              of: find.byType(ListView),
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
       await tester.pumpAndSettle();
 
       expect(container.read(libraryControllerProvider).theme.id, 'retro_deck');
@@ -841,56 +863,83 @@ void main() {
         }
         await tester.pumpAndSettle();
 
-        // Open Theme Manager directly from HUD button and verify PS3 XMB is built-in.
+        // Open Theme Manager directly from HUD button and verify PSP XMB is built-in.
         await tester.tap(find.text('Layouts & Cores'));
         for (var i = 0; i < 60; i++) {
           await tester.runAsync(
             () => Future<void>.delayed(const Duration(milliseconds: 25)),
           );
           await tester.pump();
-          if (find.text('PS3 XMB (XrossMediaBar)').evaluate().isNotEmpty) {
+          if (find
+              .text('PSP XMB (PlayStation Portable)')
+              .evaluate()
+              .isNotEmpty) {
             break;
           }
         }
         await tester.pumpAndSettle();
 
-        expect(find.text('PS3 XMB (XrossMediaBar)'), findsOneWidget);
-        expect(find.text('Ativar'), findsOneWidget);
+        expect(find.text('PSP XMB (PlayStation Portable)'), findsOneWidget);
+        expect(find.text('Ativar'), findsWidgets);
 
-        // Activate PS3 XMB from the menu.
-        await tester.tap(find.text('Ativar'));
+        // Activate PSP XMB (first inactive built-in theme) from the menu.
+        await tester.tap(find.text('Ativar').first);
         for (var i = 0; i < 60; i++) {
           await tester.runAsync(
             () => Future<void>.delayed(const Duration(milliseconds: 25)),
           );
           await tester.pump();
-          if (container.read(libraryControllerProvider).theme.id == 'ps3_xmb') {
+          if (container.read(libraryControllerProvider).theme.id == 'psp_xmb') {
             break;
           }
         }
         await tester.pumpAndSettle();
 
-        expect(container.read(libraryControllerProvider).theme.id, 'ps3_xmb');
+        expect(container.read(libraryControllerProvider).theme.id, 'psp_xmb');
 
-        // Close manager dialog to view the active PS3 XMB screen.
+        // Close manager dialog to view the active PSP XMB screen.
         await tester.tap(find.text('Fechar [B]'));
         await tester.pumpAndSettle();
 
-        expect(find.textContaining('PS3™ XMB  //'), findsOneWidget);
-        expect(find.text('Alpha Game'), findsWidgets);
-        expect(find.text('Beta Port'), findsOneWidget);
+        expect(find.text('Memory Stick™'), findsOneWidget);
+        expect(find.text(': Options'), findsOneWidget);
+        expect(find.text('Jogo'), findsOneWidget);
+        expect(find.text('Alpha Game'), findsOneWidget);
+        expect(find.text('BETA PORT'), findsOneWidget);
         expect(
           container.read(libraryControllerProvider).focusedGameId,
           'pkg:com.test.alpha',
         );
 
-        // Navigate vertically down along the XMB spine via D-Pad.
+        // Navigate vertically down along the PSP spine via D-Pad.
         await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
         await tester.pumpAndSettle();
         expect(
           container.read(libraryControllerProvider).focusedGameId,
           'pkg:com.test.beta',
         );
+        expect(find.text('Beta Port'), findsOneWidget);
+
+        // Open on-screen Options drawer from △ : Options button.
+        await tester.tap(find.text(': Options'));
+        await tester.pumpAndSettle();
+        expect(find.text('OPTIONS'), findsOneWidget);
+        expect(find.text('Layouts & Cores'), findsOneWidget);
+        expect(find.text('Retirar da Biblioteca'), findsOneWidget);
+
+        // Remove focused test app ('Beta Port') from the library.
+        await tester.tap(find.text('Retirar da Biblioteca'));
+        for (var i = 0; i < 40; i++) {
+          await tester.runAsync(
+            () => Future<void>.delayed(const Duration(milliseconds: 25)),
+          );
+          await tester.pump();
+          if (container.read(libraryControllerProvider).totalGames == 1) {
+            break;
+          }
+        }
+        await tester.pumpAndSettle();
+        expect(container.read(libraryControllerProvider).totalGames, 1);
       },
     );
   });

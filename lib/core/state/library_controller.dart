@@ -286,6 +286,38 @@ class LibraryController extends Notifier<LibraryState> {
     }
   }
 
+  Future<void> removeGame(GameItem game) async {
+    try {
+      if (game.source == GameSource.manual) {
+        await _repository.removeByIds([game.id]);
+        if (!ref.mounted) return;
+        _allGames = [
+          for (final g in _allGames)
+            if (g.id != game.id) g,
+        ];
+      } else {
+        await _repository.setHidden(game.id, hidden: true);
+        if (!ref.mounted) return;
+        _allGames = [
+          for (final g in _allGames)
+            if (g.id == game.id) g.copyWith(hidden: true) else g,
+        ];
+      }
+      final categories = await _buildCategories(_allGames, state.settings);
+      if (!ref.mounted) return;
+
+      state = state.copyWith(
+        status: LibraryStatus.ready,
+        categories: categories,
+        focusedGameId: _firstGameId(categories, preferred: state.focusedGameId),
+        clearError: true,
+      );
+    } on Object catch (e) {
+      if (!ref.mounted) return;
+      state = state.copyWith(errorMessage: 'Erro ao retirar aplicativo: $e');
+    }
+  }
+
   Future<void> toggleFavorite(GameItem game) async {
     final nextFav = !game.favorite;
     await _repository.setFavorite(game.id, favorite: nextFav);

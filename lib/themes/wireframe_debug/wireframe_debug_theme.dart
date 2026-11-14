@@ -19,6 +19,7 @@ class WireframeDebugTheme extends ConsoleThemeWidget {
     required super.onLaunchGame,
     required super.onOpenSettings,
     super.onAddApps,
+    super.onRemoveGame,
     super.onToggleFavorite,
     super.onRescan,
     super.onOpenThemeManager,
@@ -343,6 +344,10 @@ class _WireframeDebugThemeState extends State<WireframeDebugTheme> {
                     surfaceColor: surfaceColor,
                     hasSelectedGame: selected != null,
                     onAddApps: widget.onAddApps,
+                    onRemoveGame:
+                        selected == null || widget.onRemoveGame == null
+                        ? null
+                        : () => widget.onRemoveGame!(selected),
                     onToggleFavorite:
                         selected == null || widget.onToggleFavorite == null
                         ? null
@@ -930,6 +935,7 @@ class _BottomLegendBar extends StatelessWidget {
     required this.surfaceColor,
     required this.hasSelectedGame,
     required this.onAddApps,
+    required this.onRemoveGame,
     required this.onToggleFavorite,
     required this.onRescan,
     required this.onOpenSettings,
@@ -941,6 +947,7 @@ class _BottomLegendBar extends StatelessWidget {
   final Color surfaceColor;
   final bool hasSelectedGame;
   final VoidCallback? onAddApps;
+  final VoidCallback? onRemoveGame;
   final VoidCallback? onToggleFavorite;
   final VoidCallback? onRescan;
   final VoidCallback onOpenSettings;
@@ -988,6 +995,14 @@ class _BottomLegendBar extends StatelessWidget {
                     accentColor: accentColor,
                     fgColor: fgColor,
                     onTap: onToggleFavorite,
+                  ),
+                if (onRemoveGame != null)
+                  _LegendPill(
+                    keyLabel: 'DEL',
+                    label: 'Retirar',
+                    accentColor: accentColor,
+                    fgColor: fgColor,
+                    onTap: onRemoveGame,
                   ),
                 _LegendPill(
                   keyLabel: 'L1/R1',

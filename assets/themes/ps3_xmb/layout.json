@@ -8,61 +8,13 @@
       "secondaryColor": "{{theme.surface}}"
     },
     {
-      "type": "Padding",
-      "horizontal": 28,
-      "vertical": 12,
-      "child": {
-        "type": "Column",
-        "mainAxisSize": "max",
-        "crossAxisAlignment": "stretch",
-        "children": [
-          {
-            "type": "Row",
-            "mainAxisAlignment": "spaceBetween",
-            "crossAxisAlignment": "center",
-            "children": [
-              {
-                "type": "MetadataText",
-                "text": "PS3™ XMB  //  {{selectedCategory.title}}",
-                "color": "{{theme.textSecondary}}",
-                "fontSize": 13,
-                "fontWeight": "w600",
-                "letterSpacing": 2.0
-              },
-              {
-                "type": "Container",
-                "horizontal": 14,
-                "vertical": 5,
-                "color": "#380B224E",
-                "borderColor": "{{theme.accent}}",
-                "borderWidth": 1,
-                "borderRadius": 16,
-                "child": {
-                  "type": "MetadataText",
-                  "text": "{{selectedCategory.count}} / {{library.totalGames}} JOGOS  •  {{selectedGame.platform}}",
-                  "color": "{{theme.textPrimary}}",
-                  "fontSize": 12,
-                  "fontWeight": "w600"
-                }
-              }
-            ]
-          },
-          {
-            "type": "Padding",
-            "top": 8,
-            "flex": 1,
-            "child": {
-              "type": "MediaCarousel",
-              "direction": "crossbar",
-              "itemAsset": "cover",
-              "itemWidth": 84,
-              "itemHeight": 84,
-              "spacing": 10,
-              "focusScale": 1.08
-            }
-          }
-        ]
-      }
+      "type": "MediaCarousel",
+      "direction": "crossbar",
+      "itemAsset": "cover",
+      "itemWidth": 148,
+      "itemHeight": 82,
+      "spacing": 8,
+      "focusScale": 1.06
     }
   ]
 }

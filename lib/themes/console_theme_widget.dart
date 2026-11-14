@@ -16,6 +16,7 @@ abstract class ConsoleThemeWidget extends StatefulWidget {
     required this.onLaunchGame,
     required this.onOpenSettings,
     this.onAddApps,
+    this.onRemoveGame,
     this.onToggleFavorite,
     this.onRescan,
     this.onOpenThemeManager,
@@ -26,6 +27,7 @@ abstract class ConsoleThemeWidget extends StatefulWidget {
   final ValueChanged<GameItem> onLaunchGame;
   final VoidCallback onOpenSettings;
   final VoidCallback? onAddApps;
+  final ValueChanged<GameItem>? onRemoveGame;
   final ValueChanged<GameItem>? onToggleFavorite;
   final VoidCallback? onRescan;
   final VoidCallback? onOpenThemeManager;
@@ -39,6 +41,7 @@ typedef ConsoleThemeBuilder =
       required ValueChanged<GameItem> onLaunchGame,
       required VoidCallback onOpenSettings,
       VoidCallback? onAddApps,
+      ValueChanged<GameItem>? onRemoveGame,
       ValueChanged<GameItem>? onToggleFavorite,
       VoidCallback? onRescan,
       VoidCallback? onOpenThemeManager,
@@ -70,6 +73,7 @@ final class ThemeEngineRegistry {
     required ValueChanged<GameItem> onLaunchGame,
     required VoidCallback onOpenSettings,
     VoidCallback? onAddApps,
+    ValueChanged<GameItem>? onRemoveGame,
     ValueChanged<GameItem>? onToggleFavorite,
     VoidCallback? onRescan,
     VoidCallback? onOpenThemeManager,
@@ -87,6 +91,7 @@ final class ThemeEngineRegistry {
       onLaunchGame: onLaunchGame,
       onOpenSettings: onOpenSettings,
       onAddApps: onAddApps,
+      onRemoveGame: onRemoveGame,
       onToggleFavorite: onToggleFavorite,
       onRescan: onRescan,
       onOpenThemeManager: onOpenThemeManager,

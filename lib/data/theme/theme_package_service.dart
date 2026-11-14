@@ -19,10 +19,10 @@ class ThemePackageService {
        _themesDirProvider = themesDirProvider ?? _defaultThemesDir;
 
   static const String builtInDefaultId = 'wireframe_debug';
-  static const String builtInPs3XmbId = 'ps3_xmb';
+  static const String builtInPspXmbId = 'psp_xmb';
   static const List<String> builtInThemeIds = [
     builtInDefaultId,
-    builtInPs3XmbId,
+    builtInPspXmbId,
   ];
   static const String overridesFileName = 'user_overrides.json';
   static final RegExp _safeThemeId = RegExp(r'^[a-zA-Z0-9_-]+$');
@@ -63,14 +63,15 @@ class ThemePackageService {
 
   Future<ThemeManifest> loadTheme(String themeId) async {
     final themesDir = await getThemesRootDir();
-    if (builtInThemeIds.contains(themeId)) {
-      final builtIn = await _loadBuiltInTheme(themeId, themesDir);
+    final resolvedId = themeId == 'ps3_xmb' ? builtInPspXmbId : themeId;
+    if (builtInThemeIds.contains(resolvedId)) {
+      final builtIn = await _loadBuiltInTheme(resolvedId, themesDir);
       await _registerFonts(builtIn);
       return builtIn;
     }
 
     final imported = await Isolate.run(
-      () => _loadThemeFromDirSync(p.join(themesDir, themeId)),
+      () => _loadThemeFromDirSync(p.join(themesDir, resolvedId)),
       debugName: 'loadImportedTheme',
     );
     if (imported != null) {
