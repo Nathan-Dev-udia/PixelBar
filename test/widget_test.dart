@@ -969,7 +969,7 @@ void main() {
         await tester.tap(find.text('Fechar [B]'));
         await tester.pumpAndSettle();
 
-        expect(find.text('Memory Stick™'), findsOneWidget);
+        expect(find.text('Memory Stick™'), findsNothing);
         expect(find.text(': Options'), findsOneWidget);
         expect(find.text('Jogo'), findsOneWidget);
         expect(find.text('Recentes'), findsNothing);

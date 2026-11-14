@@ -188,7 +188,7 @@ class _Ps3XmbViewState extends State<Ps3XmbView> {
         _XmbActionOption(
           id: 'next_category',
           title: 'Categoria Atual: ${cat?.title ?? 'Todas'}',
-          subtitle: 'Alternar filtro do Memory Stick™ [L1/R1]',
+          subtitle: 'Alternar categoria da biblioteca [L1/R1]',
           icon: Icons.sd_storage_rounded,
           onTrigger: () => widget.onSwitchCategory(1),
         ),
@@ -387,7 +387,8 @@ class _Ps3XmbViewState extends State<Ps3XmbView> {
         final activeX = (w * (compact ? 0.24 : 0.26)).clamp(92.0, 320.0);
         final controllerTop = (h * (compact ? 0.13 : 0.19)).clamp(44.0, 150.0);
         final focalTop = controllerTop + (compact ? 68.0 : 94.0);
-        final spineLeft = activeX + (compact ? 110.0 : 146.0);
+        final colWidth = compact ? 114.0 : 144.0;
+        final spineLeft = (activeX + 22.0 - colWidth / 2).clamp(12.0, w * 0.45);
         final spineTop = (controllerTop + (compact ? 32.0 : 48.0)).clamp(
           74.0,
           focalTop - 20.0,
@@ -530,53 +531,9 @@ class _Ps3XmbViewState extends State<Ps3XmbView> {
                 ),
               ),
 
-              // Active XMB vertical content column.
+              // Active XMB vertical content column directly beneath the "Jogo" icon.
               if (_activeColumn == _XmbColumnKind.games) ...[
-                // Memory Stick Duo™ + Category card beneath the active "Jogo" icon.
-                Positioned(
-                  left: (activeX - (compact ? 26 : 36)).clamp(12.0, w),
-                  top: focalTop,
-                  child: GestureDetector(
-                    onTap: () => widget.onSwitchCategory(1),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-                            _PspMemoryStickCard(
-                              category: activeCat,
-                              selectedGame: widget.selectedGame,
-                              compact: compact,
-                              fgColor: widget.fgColor,
-                              accentColor: widget.accentColor,
-                            ),
-                            SizedBox(width: compact ? 6 : 10),
-                            Icon(
-                              Icons.arrow_left_rounded,
-                              size: compact ? 22 : 26,
-                              color: widget.glowColor.withValues(alpha: 0.94),
-                            ),
-                          ],
-                        ),
-                        if (!compact) ...[
-                          const SizedBox(height: 16),
-                          Opacity(
-                            opacity: 0.20,
-                            child: Icon(
-                              Icons.album_rounded,
-                              size: 42,
-                              color: widget.fgColor,
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                ),
-
-                // Vertical spine of 16:9 ICON0 game tiles aligned beside Memory Stick™.
+                // Vertical spine of 16:9 ICON0 game tiles aligned under the active controller icon.
                 Positioned(
                   left: spineLeft,
                   right: compact ? 16 : 36,
@@ -1495,156 +1452,6 @@ class _PspBatteryIndicator extends StatelessWidget {
   }
 }
 
-class _PspMemoryStickCard extends StatelessWidget {
-  const _PspMemoryStickCard({
-    required this.category,
-    required this.selectedGame,
-    required this.compact,
-    required this.fgColor,
-    required this.accentColor,
-  });
-
-  final GameCategory? category;
-  final GameItem? selectedGame;
-  final bool compact;
-  final Color fgColor;
-  final Color accentColor;
-
-  @override
-  Widget build(BuildContext context) {
-    final width = compact ? 92.0 : 118.0;
-    final height = compact ? 58.0 : 72.0;
-    final art =
-        selectedGame?.media.coverPath ??
-        selectedGame?.media.bannerPath ??
-        selectedGame?.media.iconPath;
-
-    return SizedBox(
-      width: width,
-      height: height,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: width * 0.38,
-            height: compact ? 7 : 9,
-            margin: const EdgeInsets.only(left: 2),
-            decoration: BoxDecoration(
-              color: const Color(0xFFDCE8F4).withValues(alpha: 0.88),
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(4),
-              ),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.55)),
-            ),
-          ),
-          Expanded(
-            child: Container(
-              padding: const EdgeInsets.all(5),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    const Color(0xFFD2E0EE).withValues(alpha: 0.88),
-                    const Color(0xFF93ABC2).withValues(alpha: 0.78),
-                  ],
-                ),
-                borderRadius: const BorderRadius.only(
-                  topRight: Radius.circular(7),
-                  bottomLeft: Radius.circular(7),
-                  bottomRight: Radius.circular(7),
-                  topLeft: Radius.circular(2),
-                ),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.55)),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.35),
-                    blurRadius: 10,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        width: 6,
-                        height: 6,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFFFA726),
-                          shape: BoxShape.circle,
-                          boxShadow: [
-                            BoxShadow(
-                              color: const Color(
-                                0xFFFFA726,
-                              ).withValues(alpha: 0.8),
-                              blurRadius: 5,
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      Expanded(
-                        child: Text(
-                          'Memory Stick™',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: const Color(0xFF10243E),
-                            fontSize: compact ? 8 : 9,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 3),
-                  Expanded(
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(4),
-                      child: art != null
-                          ? BudgetImage.file(
-                              art,
-                              width: width - 12,
-                              height: height - 34,
-                              fit: BoxFit.contain,
-                            )
-                          : Container(
-                              color: const Color(
-                                0xFF0A2449,
-                              ).withValues(alpha: 0.16),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 4,
-                              ),
-                              child: Center(
-                                child: Text(
-                                  '${category?.title.toUpperCase() ?? 'JOGOS'}\n(${category?.games.length ?? 0})',
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(
-                                    color: const Color(0xFF0F213B),
-                                    fontSize: compact ? 9 : 10,
-                                    fontWeight: FontWeight.bold,
-                                    height: 1.15,
-                                  ),
-                                ),
-                              ),
-                            ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _PspVerticalGameSpine extends StatelessWidget {
   const _PspVerticalGameSpine({
     required this.games,
@@ -2214,7 +2021,7 @@ class _PspEmptyGamesSpine extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(
-            'Não há jogos no Memory Stick™',
+            'Nenhum jogo adicionado na biblioteca',
             style: TextStyle(
               color: glowColor,
               fontSize: compact ? 15 : 18,
