@@ -24,6 +24,7 @@ class DataDrivenThemeEngine extends ConsoleThemeWidget {
     required super.onOpenSettings,
     super.onAddApps,
     super.onRemoveGame,
+    super.onEditGame,
     super.onToggleFavorite,
     super.onRescan,
     super.onOpenThemeManager,
@@ -67,6 +68,9 @@ class DataDrivenThemeEngine extends ConsoleThemeWidget {
           game?.media.backgroundPath ?? game?.media.bannerPath ?? '',
         'selectedGame.platform' => game?.platform.toUpperCase() ?? '-',
         'selectedGame.kind' => game?.kind.name ?? '-',
+        'selectedGame.description' => game?.description ?? '',
+        'selectedGame.developer' => game?.developer ?? '',
+        'selectedGame.releaseYear' => game?.releaseYear ?? '',
         'selectedGame.playCount' => '${game?.playCount ?? 0}',
         'selectedGame.lastPlayed' =>
           game?.lastPlayedAt?.toLocal().toString().substring(0, 16) ?? 'Nunca',
@@ -363,6 +367,9 @@ class _DataDrivenThemeEngineState extends State<DataDrivenThemeEngine> {
                   onRemoveGame: selected == null || widget.onRemoveGame == null
                       ? null
                       : () => widget.onRemoveGame!(selected),
+                  onEditGame: selected == null || widget.onEditGame == null
+                      ? null
+                      : () => widget.onEditGame!(selected),
                   onToggleFavorite:
                       selected == null || widget.onToggleFavorite == null
                       ? null
@@ -727,6 +734,7 @@ class _DataDrivenThemeEngineState extends State<DataDrivenThemeEngine> {
               onOpenSettings: widget.onOpenSettings,
               onAddApps: widget.onAddApps,
               onRemoveGame: widget.onRemoveGame,
+              onEditGame: widget.onEditGame,
               onToggleFavorite: widget.onToggleFavorite,
               onRescan: widget.onRescan,
               onOpenThemeManager: widget.onOpenThemeManager,
@@ -1253,6 +1261,7 @@ class _DataDrivenBottomBar extends StatelessWidget {
     required this.hasSelectedGame,
     required this.onAddApps,
     required this.onRemoveGame,
+    required this.onEditGame,
     required this.onToggleFavorite,
     required this.onRescan,
     required this.onOpenThemeManager,
@@ -1267,6 +1276,7 @@ class _DataDrivenBottomBar extends StatelessWidget {
   final bool hasSelectedGame;
   final VoidCallback? onAddApps;
   final VoidCallback? onRemoveGame;
+  final VoidCallback? onEditGame;
   final VoidCallback? onToggleFavorite;
   final VoidCallback? onRescan;
   final VoidCallback? onOpenThemeManager;
@@ -1323,6 +1333,14 @@ class _DataDrivenBottomBar extends StatelessWidget {
                     accentColor: accentColor,
                     fgColor: fgColor,
                     onTap: onRemoveGame,
+                  ),
+                if (onEditGame != null)
+                  _HudHint(
+                    keyLabel: 'META',
+                    label: 'Metadados',
+                    accentColor: accentColor,
+                    fgColor: fgColor,
+                    onTap: onEditGame,
                   ),
                 _HudHint(
                   keyLabel: 'L1/R1',

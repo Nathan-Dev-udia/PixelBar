@@ -45,6 +45,7 @@ class Ps3XmbView extends StatefulWidget {
     required this.onOpenSettings,
     this.onAddApps,
     this.onRemoveGame,
+    this.onEditGame,
     this.onToggleFavorite,
     this.onRescan,
     this.onOpenThemeManager,
@@ -72,6 +73,7 @@ class Ps3XmbView extends StatefulWidget {
   final VoidCallback onOpenSettings;
   final VoidCallback? onAddApps;
   final ValueChanged<GameItem>? onRemoveGame;
+  final ValueChanged<GameItem>? onEditGame;
   final ValueChanged<GameItem>? onToggleFavorite;
   final VoidCallback? onRescan;
   final VoidCallback? onOpenThemeManager;
@@ -227,6 +229,14 @@ class _Ps3XmbViewState extends State<Ps3XmbView> {
                 : Icons.star_outline_rounded,
             onTrigger: () => widget.onToggleFavorite!(widget.selectedGame!),
           ),
+        if (widget.selectedGame != null && widget.onEditGame != null)
+          _XmbActionOption(
+            id: 'edit_metadata',
+            title: 'Editar Jogo & Metadados',
+            subtitle: 'Baixar logo, fundo, ícone, nome e descrição',
+            icon: Icons.auto_fix_high_rounded,
+            onTrigger: () => widget.onEditGame!(widget.selectedGame!),
+          ),
         if (widget.selectedGame != null && widget.onRemoveGame != null)
           _XmbActionOption(
             id: 'remove_game',
@@ -296,6 +306,17 @@ class _Ps3XmbViewState extends State<Ps3XmbView> {
           subtitle: game.title,
           icon: game.favorite ? Icons.star_rounded : Icons.star_outline_rounded,
           onTrigger: () => widget.onToggleFavorite!(game),
+        ),
+      if (game != null && widget.onEditGame != null)
+        _XmbActionOption(
+          id: 'drawer_edit_metadata',
+          title: 'Editar Jogo & Metadados',
+          subtitle: 'Baixar logo, fundo, ícone, nome e descrição',
+          icon: Icons.auto_fix_high_rounded,
+          onTrigger: () {
+            setState(() => _optionsOpen = false);
+            widget.onEditGame!(game);
+          },
         ),
       if (game != null && widget.onRemoveGame != null)
         _XmbActionOption(
@@ -374,6 +395,9 @@ class _Ps3XmbViewState extends State<Ps3XmbView> {
 
         final activeCat = _activeCategory;
         final games = activeCat?.games ?? const <GameItem>[];
+        final bgPath =
+            widget.selectedGame?.media.backgroundPath ??
+            widget.selectedGame?.media.bannerPath;
 
         return Focus(
           canRequestFocus: false,
@@ -409,6 +433,45 @@ class _Ps3XmbViewState extends State<Ps3XmbView> {
           child: Stack(
             fit: StackFit.expand,
             children: [
+              if (bgPath != null &&
+                  bgPath.isNotEmpty &&
+                  w > 0 &&
+                  h > 0 &&
+                  w < 4096 &&
+                  h < 4096)
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 280),
+                      child: Stack(
+                        key: ValueKey(bgPath),
+                        fit: StackFit.expand,
+                        children: [
+                          BudgetImage.file(
+                            bgPath,
+                            width: w,
+                            height: h,
+                            fit: BoxFit.cover,
+                          ),
+                          Container(
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                begin: Alignment.topCenter,
+                                end: Alignment.bottomCenter,
+                                colors: [
+                                  const Color(
+                                    0xFF061C46,
+                                  ).withValues(alpha: 0.44),
+                                  Colors.black.withValues(alpha: 0.62),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
               // Clean PSP top-right status bar: Memory Stick count + Clock + 3-bar Battery.
               Positioned(
                 top: compact ? 10 : 18,
@@ -1867,6 +1930,17 @@ class _PspSpineRowState extends State<_PspSpineRow> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
+                      if (widget.game.media.logoPath != null &&
+                          widget.game.media.logoPath!.isNotEmpty) ...[
+                        BudgetImage.file(
+                          widget.game.media.logoPath,
+                          width: widget.compact ? 150 : 210,
+                          height: widget.compact ? 36 : 48,
+                          fit: BoxFit.contain,
+                          placeholder: const SizedBox.shrink(),
+                        ),
+                        const SizedBox(height: 4),
+                      ],
                       Text(
                         widget.game.title,
                         maxLines: 1,
@@ -1936,6 +2010,26 @@ class _PspSpineRowState extends State<_PspSpineRow> {
                           ),
                         ],
                       ),
+                      if (widget.game.description != null &&
+                          widget.game.description!.isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          widget.game.description!,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: widget.fgColor.withValues(alpha: 0.88),
+                            fontSize: widget.compact ? 10.5 : 11.5,
+                            height: 1.2,
+                            shadows: [
+                              Shadow(
+                                color: Colors.black.withValues(alpha: 0.7),
+                                blurRadius: 4,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),

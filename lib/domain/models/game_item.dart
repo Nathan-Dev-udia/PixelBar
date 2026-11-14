@@ -112,6 +112,10 @@ class GameItem {
     required this.addedAt,
     this.platform = 'android',
     this.media = MediaAssets.empty,
+    this.description,
+    this.developer,
+    this.releaseYear,
+    this.titleCustomized = false,
     this.categoryOverride,
     this.favorite = false,
     this.hidden = false,
@@ -136,6 +140,10 @@ class GameItem {
   /// Platform key (`android`, `n64`, `gc`, `ps2`, …) used for grouping.
   final String platform;
   final MediaAssets media;
+  final String? description;
+  final String? developer;
+  final String? releaseYear;
+  final bool titleCustomized;
 
   /// User-chosen category id; overrides automatic categorisation.
   final String? categoryOverride;
@@ -156,6 +164,10 @@ class GameItem {
     LaunchConfig? launch,
     String? platform,
     MediaAssets? media,
+    String? description,
+    String? developer,
+    String? releaseYear,
+    bool? titleCustomized,
     String? categoryOverride,
     bool clearCategoryOverride = false,
     bool? favorite,
@@ -171,6 +183,10 @@ class GameItem {
     addedAt: addedAt,
     platform: platform ?? this.platform,
     media: media ?? this.media,
+    description: description ?? this.description,
+    developer: developer ?? this.developer,
+    releaseYear: releaseYear ?? this.releaseYear,
+    titleCustomized: titleCustomized ?? this.titleCustomized,
     categoryOverride: clearCategoryOverride
         ? null
         : (categoryOverride ?? this.categoryOverride),
@@ -191,6 +207,10 @@ class GameItem {
       other.addedAt == addedAt &&
       other.platform == platform &&
       other.media == media &&
+      other.description == description &&
+      other.developer == developer &&
+      other.releaseYear == releaseYear &&
+      other.titleCustomized == titleCustomized &&
       other.categoryOverride == categoryOverride &&
       other.favorite == favorite &&
       other.hidden == hidden &&
@@ -207,6 +227,10 @@ class GameItem {
     addedAt,
     platform,
     media, //
+    description,
+    developer,
+    releaseYear,
+    titleCustomized,
     categoryOverride,
     favorite,
     hidden,

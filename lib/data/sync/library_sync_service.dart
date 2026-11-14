@@ -43,7 +43,9 @@ class LibrarySyncService {
       library = [
         for (final g in library)
           switch (icons[g.launch.packageName]) {
-            final path? when path != g.media.iconPath =>
+            final path?
+                when (g.media.iconPath == null || g.media.iconPath!.isEmpty) &&
+                    path != g.media.iconPath =>
               upserts[g.id] = g.copyWith(
                 media: g.media.copyWith(iconPath: path),
               ),

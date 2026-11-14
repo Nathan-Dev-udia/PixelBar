@@ -11,6 +11,7 @@ import 'domain/models/platform_models.dart';
 import 'themes/console_theme_widget.dart';
 import 'themes/data_driven/data_driven_theme_engine.dart';
 import 'themes/manager/theme_manager_screen.dart';
+import 'themes/metadata/game_metadata_editor_dialog.dart';
 import 'themes/wireframe_debug/wireframe_debug_theme.dart';
 
 void registerDefaultThemes() {
@@ -25,6 +26,7 @@ void registerDefaultThemes() {
         required onOpenSettings,
         onAddApps,
         onRemoveGame,
+        onEditGame,
         onToggleFavorite,
         onRescan,
         onOpenThemeManager,
@@ -36,6 +38,7 @@ void registerDefaultThemes() {
         onOpenSettings: onOpenSettings,
         onAddApps: onAddApps,
         onRemoveGame: onRemoveGame,
+        onEditGame: onEditGame,
         onToggleFavorite: onToggleFavorite,
         onRescan: onRescan,
         onOpenThemeManager: onOpenThemeManager,
@@ -53,6 +56,7 @@ void registerDefaultThemes() {
         required onOpenSettings,
         onAddApps,
         onRemoveGame,
+        onEditGame,
         onToggleFavorite,
         onRescan,
         onOpenThemeManager,
@@ -64,6 +68,7 @@ void registerDefaultThemes() {
         onOpenSettings: onOpenSettings,
         onAddApps: onAddApps,
         onRemoveGame: onRemoveGame,
+        onEditGame: onEditGame,
         onToggleFavorite: onToggleFavorite,
         onRescan: onRescan,
         onOpenThemeManager: onOpenThemeManager,
@@ -144,6 +149,7 @@ class _OndaDeckShell extends ConsumerWidget {
             onOpenSettings: () => _openSettings(context),
             onAddApps: () => _openManualAppPicker(context),
             onRemoveGame: controller.removeGame,
+            onEditGame: (game) => _openGameMetadataEditor(context, game),
             onToggleFavorite: controller.toggleFavorite,
             onRescan: controller.refreshInstalledApps,
             onOpenThemeManager: () => _openThemeManager(context),
@@ -157,6 +163,12 @@ class _OndaDeckShell extends ConsumerWidget {
     context: context,
     builder: (_) => const _ManualAppPickerDialog(),
   );
+
+  Future<void> _openGameMetadataEditor(BuildContext context, GameItem game) =>
+      showDialog<void>(
+        context: context,
+        builder: (_) => GameMetadataEditorDialog(game: game),
+      );
 
   Future<void> _openSettings(BuildContext context) => showDialog<void>(
     context: context,

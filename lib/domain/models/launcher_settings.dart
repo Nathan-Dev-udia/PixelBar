@@ -11,6 +11,7 @@ class LauncherSettings {
     this.sfxEnabled = true,
     this.reduceMotion = false,
     this.sortMode = LibrarySortMode.alphabetical,
+    this.steamGridDbApiKey = '',
   });
 
   final String activeThemeId;
@@ -21,6 +22,7 @@ class LauncherSettings {
   final bool sfxEnabled;
   final bool reduceMotion;
   final LibrarySortMode sortMode;
+  final String steamGridDbApiKey;
 
   LauncherSettings copyWith({
     String? activeThemeId,
@@ -29,6 +31,7 @@ class LauncherSettings {
     bool? sfxEnabled,
     bool? reduceMotion,
     LibrarySortMode? sortMode,
+    String? steamGridDbApiKey,
   }) => LauncherSettings(
     activeThemeId: activeThemeId ?? this.activeThemeId,
     showHidden: showHidden ?? this.showHidden,
@@ -36,6 +39,7 @@ class LauncherSettings {
     sfxEnabled: sfxEnabled ?? this.sfxEnabled,
     reduceMotion: reduceMotion ?? this.reduceMotion,
     sortMode: sortMode ?? this.sortMode,
+    steamGridDbApiKey: steamGridDbApiKey ?? this.steamGridDbApiKey,
   );
 
   factory LauncherSettings.fromJson(Map<String, Object?> json) =>
@@ -48,6 +52,7 @@ class LauncherSettings {
         sortMode:
             LibrarySortMode.values.asNameMap()[json['sortMode']] ??
             LibrarySortMode.alphabetical,
+        steamGridDbApiKey: json['steamGridDbApiKey'] as String? ?? '',
       );
 
   Map<String, Object?> toJson() => {
@@ -57,6 +62,7 @@ class LauncherSettings {
     'sfxEnabled': sfxEnabled,
     'reduceMotion': reduceMotion,
     'sortMode': sortMode.name,
+    if (steamGridDbApiKey.isNotEmpty) 'steamGridDbApiKey': steamGridDbApiKey,
   };
 
   @override
@@ -67,7 +73,8 @@ class LauncherSettings {
       other.autoImportGames == autoImportGames &&
       other.sfxEnabled == sfxEnabled &&
       other.reduceMotion == reduceMotion &&
-      other.sortMode == sortMode;
+      other.sortMode == sortMode &&
+      other.steamGridDbApiKey == steamGridDbApiKey;
 
   @override
   int get hashCode => Object.hash(
@@ -77,5 +84,6 @@ class LauncherSettings {
     sfxEnabled,
     reduceMotion,
     sortMode,
+    steamGridDbApiKey,
   );
 }

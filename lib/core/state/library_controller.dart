@@ -3,6 +3,7 @@ import 'dart:isolate';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/db/app_database.dart';
+import '../../data/metadata/game_metadata_service.dart';
 import '../../data/repositories/sqflite_game_library_repository.dart';
 import '../../data/sync/library_sync_service.dart';
 import '../../data/theme/theme_manifest_loader.dart';
@@ -47,6 +48,10 @@ final themePackageServiceProvider = Provider<ThemePackageService>(
   (ref) => ThemePackageService(),
 );
 
+final gameMetadataServiceProvider = Provider<GameMetadataService>(
+  (ref) => GameMetadataService(),
+);
+
 final libraryControllerProvider =
     NotifierProvider<LibraryController, LibraryState>(LibraryController.new);
 
@@ -61,6 +66,8 @@ class LibraryController extends Notifier<LibraryState> {
   ThemeManifestLoader get _themeLoader => ref.read(themeManifestLoaderProvider);
   ThemePackageService get _themePackageService =>
       ref.read(themePackageServiceProvider);
+  GameMetadataService get metadataService =>
+      ref.read(gameMetadataServiceProvider);
 
   @override
   LibraryState build() {
@@ -331,6 +338,59 @@ class LibraryController extends Notifier<LibraryState> {
     if (!ref.mounted) return;
 
     state = state.copyWith(categories: categories, focusedGameId: game.id);
+  }
+
+  Future<void> updateGame(GameItem updated) async {
+    await _repository.upsertAll([updated]);
+    if (!ref.mounted) return;
+
+    var found = false;
+    final nextGames = <GameItem>[];
+    for (final g in _allGames) {
+      if (g.id == updated.id) {
+        nextGames.add(updated);
+        found = true;
+      } else {
+        nextGames.add(g);
+      }
+    }
+    if (!found) {
+      nextGames.add(updated);
+    }
+    _allGames = nextGames;
+    final categories = await _buildCategories(_allGames, state.settings);
+    if (!ref.mounted) return;
+
+    state = state.copyWith(
+      categories: categories,
+      focusedGameId: updated.id,
+      clearError: true,
+    );
+  }
+
+  Future<GameItem> downloadMetadataForGame(
+    GameItem game,
+    MetadataCandidate candidate, {
+    bool applyText = true,
+    bool downloadIcon = true,
+    bool downloadLogo = true,
+    bool downloadCover = true,
+    bool downloadBanner = true,
+    bool downloadBackground = true,
+  }) async {
+    final updated = await metadataService.downloadAndApply(
+      game: game,
+      candidate: candidate,
+      steamGridDbApiKey: state.settings.steamGridDbApiKey,
+      applyText: applyText,
+      downloadIcon: downloadIcon,
+      downloadLogo: downloadLogo,
+      downloadCover: downloadCover,
+      downloadBanner: downloadBanner,
+      downloadBackground: downloadBackground,
+    );
+    await updateGame(updated);
+    return updated;
   }
 
   Future<void> updateSettings(LauncherSettings newSettings) async {

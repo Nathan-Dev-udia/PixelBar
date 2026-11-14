@@ -61,7 +61,9 @@ abstract final class LibraryMerger {
         }
         continue;
       }
-      if (g.source == GameSource.scanned && g.title != app.label) {
+      if (g.source == GameSource.scanned &&
+          !g.titleCustomized &&
+          g.title != app.label) {
         final updated = g.copyWith(title: app.label);
         library.add(updated);
         upserts.add(updated);

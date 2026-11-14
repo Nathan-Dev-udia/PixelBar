@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ondadeck/core/memory/lifecycle_memory_manager.dart';
 import 'package:ondadeck/core/state/library_controller.dart';
+import 'package:ondadeck/data/metadata/game_metadata_service.dart';
 import 'package:ondadeck/data/theme/theme_package_service.dart';
 import 'package:ondadeck/data/theme/zip_archive_extractor.dart';
 import 'package:ondadeck/domain/models/emulator_profile.dart';
@@ -295,6 +296,22 @@ void main() {
         final packageService = ThemePackageService(
           themesDirProvider: () async => tempThemesDir.path,
         );
+        const fakeCandidate = MetadataCandidate(
+          provider: 'Steam',
+          externalId: '1234',
+          title: 'Alpha Game Remastered',
+          description: 'Clássico de ação 16-bit com fases inéditas.',
+          developer: 'Onda Studio',
+          releaseYear: '2026',
+        );
+        final metadataService = GameMetadataService(
+          searchOverride: (query, {steamGridDbApiKey}) async => const [
+            fakeCandidate,
+          ],
+          detailsOverride: (candidate, {steamGridDbApiKey}) async =>
+              fakeCandidate,
+          mediaDirProvider: () async => tempThemesDir.path,
+        );
 
         late ProviderContainer container;
 
@@ -304,6 +321,7 @@ void main() {
               launcherGatewayProvider.overrideWithValue(fakeGateway),
               gameLibraryRepositoryProvider.overrideWithValue(fakeRepo),
               themePackageServiceProvider.overrideWithValue(packageService),
+              gameMetadataServiceProvider.overrideWithValue(metadataService),
             ],
             child: Consumer(
               builder: (context, ref, child) {
@@ -830,6 +848,22 @@ void main() {
         final packageService = ThemePackageService(
           themesDirProvider: () async => tempThemesDir.path,
         );
+        const fakeCandidate = MetadataCandidate(
+          provider: 'Steam',
+          externalId: '1234',
+          title: 'Alpha Game Remastered',
+          description: 'Clássico de ação 16-bit com fases inéditas.',
+          developer: 'Onda Studio',
+          releaseYear: '2026',
+        );
+        final metadataService = GameMetadataService(
+          searchOverride: (query, {steamGridDbApiKey}) async => const [
+            fakeCandidate,
+          ],
+          detailsOverride: (candidate, {steamGridDbApiKey}) async =>
+              fakeCandidate,
+          mediaDirProvider: () async => tempThemesDir.path,
+        );
 
         late ProviderContainer container;
 
@@ -839,6 +873,7 @@ void main() {
               launcherGatewayProvider.overrideWithValue(fakeGateway),
               gameLibraryRepositoryProvider.overrideWithValue(fakeRepo),
               themePackageServiceProvider.overrideWithValue(packageService),
+              gameMetadataServiceProvider.overrideWithValue(metadataService),
             ],
             child: Consumer(
               builder: (context, ref, child) {
@@ -940,6 +975,68 @@ void main() {
         }
         await tester.pumpAndSettle();
         expect(container.read(libraryControllerProvider).totalGames, 1);
+
+        // Open Playnite-style Metadata Editor for remaining game ('Alpha Game').
+        await tester.tap(find.text(': Options'));
+        await tester.pumpAndSettle();
+        expect(find.text('Editar Jogo & Metadados'), findsOneWidget);
+
+        await tester.tap(find.text('Editar Jogo & Metadados'));
+        await tester.pumpAndSettle();
+        expect(find.text('EDITAR JOGO & METADADOS (PLAYNITE)'), findsOneWidget);
+
+        // Search online metadata (mocked Steam API) and apply to game.
+        await tester.tap(find.text('Buscar Metadados'));
+        for (var i = 0; i < 40; i++) {
+          await tester.runAsync(
+            () => Future<void>.delayed(const Duration(milliseconds: 25)),
+          );
+          await tester.pump();
+          if (find.text('Baixar & Aplicar').evaluate().isNotEmpty) {
+            break;
+          }
+        }
+        await tester.pumpAndSettle();
+        expect(find.text('Baixar & Aplicar'), findsOneWidget);
+
+        await tester.tap(find.text('Baixar & Aplicar'));
+        for (var i = 0; i < 40; i++) {
+          await tester.runAsync(
+            () => Future<void>.delayed(const Duration(milliseconds: 25)),
+          );
+          await tester.pump();
+          if (find
+              .textContaining('Metadados e mídias aplicados')
+              .evaluate()
+              .isNotEmpty) {
+            break;
+          }
+        }
+        await tester.pumpAndSettle();
+        expect(
+          find.textContaining('Metadados e mídias aplicados'),
+          findsOneWidget,
+        );
+
+        await tester.tap(find.text('Fechar [B]'));
+        await tester.pumpAndSettle();
+
+        final updatedGame = container
+            .read(libraryControllerProvider)
+            .categories
+            .expand((c) => c.games)
+            .first;
+        expect(updatedGame.title, 'Alpha Game Remastered');
+        expect(
+          updatedGame.description,
+          'Clássico de ação 16-bit com fases inéditas.',
+        );
+        expect(updatedGame.titleCustomized, isTrue);
+        expect(find.text('Alpha Game Remastered'), findsWidgets);
+        expect(
+          find.text('Clássico de ação 16-bit com fases inéditas.'),
+          findsOneWidget,
+        );
       },
     );
   });

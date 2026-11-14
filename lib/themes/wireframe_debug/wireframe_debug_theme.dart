@@ -20,6 +20,7 @@ class WireframeDebugTheme extends ConsoleThemeWidget {
     required super.onOpenSettings,
     super.onAddApps,
     super.onRemoveGame,
+    super.onEditGame,
     super.onToggleFavorite,
     super.onRescan,
     super.onOpenThemeManager,
@@ -348,6 +349,9 @@ class _WireframeDebugThemeState extends State<WireframeDebugTheme> {
                         selected == null || widget.onRemoveGame == null
                         ? null
                         : () => widget.onRemoveGame!(selected),
+                    onEditGame: selected == null || widget.onEditGame == null
+                        ? null
+                        : () => widget.onEditGame!(selected),
                     onToggleFavorite:
                         selected == null || widget.onToggleFavorite == null
                         ? null
@@ -936,6 +940,7 @@ class _BottomLegendBar extends StatelessWidget {
     required this.hasSelectedGame,
     required this.onAddApps,
     required this.onRemoveGame,
+    required this.onEditGame,
     required this.onToggleFavorite,
     required this.onRescan,
     required this.onOpenSettings,
@@ -948,6 +953,7 @@ class _BottomLegendBar extends StatelessWidget {
   final bool hasSelectedGame;
   final VoidCallback? onAddApps;
   final VoidCallback? onRemoveGame;
+  final VoidCallback? onEditGame;
   final VoidCallback? onToggleFavorite;
   final VoidCallback? onRescan;
   final VoidCallback onOpenSettings;
@@ -1003,6 +1009,14 @@ class _BottomLegendBar extends StatelessWidget {
                     accentColor: accentColor,
                     fgColor: fgColor,
                     onTap: onRemoveGame,
+                  ),
+                if (onEditGame != null)
+                  _LegendPill(
+                    keyLabel: 'META',
+                    label: 'Metadados',
+                    accentColor: accentColor,
+                    fgColor: fgColor,
+                    onTap: onEditGame,
                   ),
                 _LegendPill(
                   keyLabel: 'L1/R1',
