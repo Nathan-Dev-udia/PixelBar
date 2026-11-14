@@ -22,6 +22,8 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.DocumentsContract
 import android.provider.OpenableColumns
+import android.provider.Settings
+import androidx.core.content.FileProvider
 import io.flutter.plugin.common.BinaryMessenger
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
@@ -49,6 +51,7 @@ class LauncherPlugin(
         const val CHANNEL_NAME = "com.ondapixel.ondadeck/launcher"
         private const val REQ_PICK_DIRECTORY = 4101
         private const val REQ_PICK_FILE = 4102
+        private const val REQ_INSTALL_PERMISSION = 4103
         private const val MAX_TEXT_BYTES = 2 * 1024 * 1024
         private const val MAX_ARCHIVE_BYTES = 64L * 1024L * 1024L
     }
@@ -58,6 +61,8 @@ class LauncherPlugin(
     private val mainHandler = Handler(Looper.getMainLooper())
     private var pendingPickerResult: MethodChannel.Result? = null
     private var pendingPickerIsTree: Boolean = false
+    private var pendingInstallResult: MethodChannel.Result? = null
+    private var pendingInstallApkPath: String? = null
 
     fun attach(messenger: BinaryMessenger) {
         val ch = MethodChannel(messenger, CHANNEL_NAME)
@@ -154,11 +159,37 @@ class LauncherPlugin(
                 }
             }
             "getDeviceProfile" -> runAsync(result) { getDeviceProfile() }
+            "installApk" -> {
+                val filePath = call.argument<String>("filePath")
+                if (filePath.isNullOrBlank()) {
+                    result.error("INVALID_ARGS", "filePath is required.", null)
+                } else {
+                    installApk(filePath, result)
+                }
+            }
             else -> result.notImplemented()
         }
     }
 
     fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?): Boolean {
+        if (requestCode == REQ_INSTALL_PERMISSION) {
+            val pendingResult = pendingInstallResult ?: return true
+            val apkPath = pendingInstallApkPath
+            pendingInstallResult = null
+            pendingInstallApkPath = null
+            if (apkPath.isNullOrBlank()) {
+                pendingResult.success(false)
+                return true
+            }
+            val canInstall = Build.VERSION.SDK_INT < Build.VERSION_CODES.O ||
+                activity.packageManager.canRequestPackageInstalls()
+            if (!canInstall) {
+                pendingResult.success(false)
+                return true
+            }
+            runAsync(pendingResult) { launchApkInstallerIntent(apkPath) }
+            return true
+        }
         if (requestCode != REQ_PICK_DIRECTORY && requestCode != REQ_PICK_FILE) return false
         val result = pendingPickerResult ?: return true
         val isTree = pendingPickerIsTree
@@ -948,6 +979,68 @@ class LauncherPlugin(
             "abis" to Build.SUPPORTED_ABIS.toList(),
             "isTelevision" to isTv,
         )
+    }
+
+    private fun installApk(filePath: String, result: MethodChannel.Result) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+            !activity.packageManager.canRequestPackageInstalls()
+        ) {
+            pendingInstallResult?.success(false)
+            pendingInstallResult = result
+            pendingInstallApkPath = filePath
+            try {
+                val settingsIntent = Intent(
+                    Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                    Uri.parse("package:${activity.packageName}"),
+                )
+                activity.startActivityForResult(settingsIntent, REQ_INSTALL_PERMISSION)
+            } catch (t: Throwable) {
+                pendingInstallResult = null
+                pendingInstallApkPath = null
+                result.error(
+                    "INSTALL_PERMISSION_ERROR",
+                    t.message ?: "Unable to open unknown app sources settings.",
+                    null,
+                )
+            }
+            return
+        }
+        runAsync(result) { launchApkInstallerIntent(filePath) }
+    }
+
+    private fun launchApkInstallerIntent(filePath: String): Boolean {
+        val source = File(filePath)
+        if (!source.exists() || !source.isFile) {
+            throw IllegalArgumentException("APK file not found: $filePath")
+        }
+        val cacheDir = activity.cacheDir.canonicalFile
+        val filesDir = activity.filesDir.canonicalFile
+        val canonicalSource = source.canonicalFile
+        val shareableFile = if (
+            canonicalSource.path.startsWith(cacheDir.path + File.separator) ||
+            canonicalSource.path.startsWith(filesDir.path + File.separator)
+        ) {
+            canonicalSource
+        } else {
+            val updatesDir = File(cacheDir, "updates")
+            if (!updatesDir.exists()) updatesDir.mkdirs()
+            val staged = File(updatesDir, canonicalSource.name.ifBlank { "ondadeck_update.apk" })
+            canonicalSource.copyTo(staged, overwrite = true)
+            staged
+        }
+
+        val authority = "${activity.packageName}.fileprovider"
+        val contentUri = FileProvider.getUriForFile(activity, authority, shareableFile)
+        val installIntent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(contentUri, "application/vnd.android.package-archive")
+            clipData = ClipData.newRawUri("APK Update", contentUri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+            putExtra(Intent.EXTRA_NOT_UNKNOWN_SOURCE, true)
+        }
+        mainHandler.post {
+            activity.startActivity(installIntent)
+        }
+        return true
     }
 
     private fun sha256(input: String): String {

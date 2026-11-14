@@ -55,5 +55,10 @@ abstract interface class LauncherGateway {
   /// cache file off the UI thread and returns its absolute file path.
   Future<String> copyDocumentToCache(String uri, {String? preferredName});
 
+  /// Triggers the Android package installer for a downloaded APK at [filePath].
+  /// Returns `true` when the installer intent was launched, or `false` if the
+  /// user declined the unknown-app-sources permission prompt.
+  Future<bool> installApk(String filePath);
+
   Future<DeviceProfile> getDeviceProfile();
 }

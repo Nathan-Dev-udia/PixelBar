@@ -14,6 +14,7 @@
 - **Navegação 100% Gamepad-First:** operação completa via D-Pad, analógico esquerdo (mapeado nativamente em Kotlin com deadzone e histerese) e botões A/B/X/Y/L1/R1/START/SELECT, mantendo suporte secundário por toque.
 - **Motor de Temas Data-Driven (`DataDrivenThemeEngine`):** temas importáveis via `.zip` ou `.ondatheme` sem recompilar o aplicativo. O app já inclui dois layouts built-in no menu: `wireframe_debug` (*Onda Default*) e `psp_xmb` (*PSP XMB - PlayStation Portable*, com barra horizontal superior em estilo XMB, indicador *Memory Stick™*, miniaturas 16:9 `ICON0`, bateria de 3 barras e ondas de seda).
 - **Gerenciador de Temas & Editor de Cores:** instale pacotes da comunidade, troque de tema instantaneamente, personalize qualquer token de cor por HSV / Paleta Rápida / Hexadecimal (salvos em `user_overrides.json`) e restaure o padrão original a qualquer momento.
+- **Auto-Updater Integrado via GitHub Releases:** verifica silenciosamente ao abrir (e sob demanda em *Configurações -> Verificar Atualizações*) novas versões `v1.0.<build>` publicadas em `Nathan-Dev-udia/PixelBar/releases/latest`, baixa o `.apk` com barra de progresso e dispara o instalador nativo Android via `FileProvider`.
 
 ---
 
@@ -255,6 +256,16 @@ Crie uma pasta com `manifest.json` e `layout.json` abaixo e compacte os arquivos
   ]
 }
 ```
+
+---
+
+## Auto-Updater Integrado (GitHub Releases)
+
+O **OndaDeck / PixelBar** atualiza a si mesmo diretamente pelo aplicativo usando as Releases públicas de [`Nathan-Dev-udia/PixelBar`](https://github.com/Nathan-Dev-udia/PixelBar/releases/latest), sem precisar de lojas ou gerenciadores externos:
+
+- **Versionamento automático em CI (`.github/workflows/release-apk.yml`):** cada build na branch `main` compila o APK `arm64` com `--build-name=1.0.${{ github.run_number }}` e `--build-number=${{ github.run_number }}`, publicando a tag `v1.0.<build>` como release oficial (`latest`).
+- **Checagem silenciosa + manual:** `AppUpdateService` usa `package_info_plus` para comparar o `buildNumber` instalado com `/releases/latest` ao abrir o launcher (sem bloquear a UI) e também pelo botão **"Verificar Atualizações"** nas *Configurações*.
+- **Download + Instalação Nativa Android:** ao confirmar no modal estilo console (navegável por D-Pad/A/B e toque), o `.apk` é baixado com barra de progresso para o cache temporário do app, os arquivos antigos são limpos automaticamente e o `LauncherPlugin` solicita `REQUEST_INSTALL_PACKAGES` (se ainda não concedido) antes de abrir o `PackageInstaller` via `FileProvider`.
 
 ---
 

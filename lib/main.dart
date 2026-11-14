@@ -13,6 +13,7 @@ import 'themes/console_theme_widget.dart';
 import 'themes/data_driven/data_driven_theme_engine.dart';
 import 'themes/manager/theme_manager_screen.dart';
 import 'themes/metadata/game_metadata_editor_dialog.dart';
+import 'themes/update/app_update_dialog.dart';
 import 'themes/wireframe_debug/wireframe_debug_theme.dart';
 
 void registerDefaultThemes() {
@@ -118,11 +119,44 @@ class _OndaDeckAppState extends State<OndaDeckApp> {
   }
 }
 
-class _OndaDeckShell extends ConsumerWidget {
+class _OndaDeckShell extends ConsumerStatefulWidget {
   const _OndaDeckShell();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_OndaDeckShell> createState() => _OndaDeckShellState();
+}
+
+class _OndaDeckShellState extends ConsumerState<_OndaDeckShell> {
+  bool _updateCheckStarted = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _runSilentStartupUpdateCheck();
+    });
+  }
+
+  Future<void> _runSilentStartupUpdateCheck() async {
+    if (_updateCheckStarted || !mounted) return;
+    _updateCheckStarted = true;
+    final updateService = ref.read(appUpdateServiceProvider);
+    try {
+      await updateService.cleanupStaleUpdates();
+      final info = await updateService.checkForUpdate();
+      if (!mounted || !info.hasUpdate) return;
+      await showDialog<void>(
+        context: context,
+        builder: (_) =>
+            AppUpdateDialog(updateInfo: info, updateService: updateService),
+      );
+    } catch (_) {
+      // Silent startup check must never block launcher startup when offline.
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final state = ref.watch(libraryControllerProvider);
     final controller = ref.read(libraryControllerProvider.notifier);
 
@@ -752,11 +786,55 @@ class _InstalledAppPickerRowState extends State<_InstalledAppPickerRow> {
   }
 }
 
-class _SettingsDialog extends ConsumerWidget {
+class _SettingsDialog extends ConsumerStatefulWidget {
   const _SettingsDialog();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_SettingsDialog> createState() => _SettingsDialogState();
+}
+
+class _SettingsDialogState extends ConsumerState<_SettingsDialog> {
+  bool _checkingUpdates = false;
+  String? _updateStatus;
+
+  Future<void> _checkUpdatesManually() async {
+    if (_checkingUpdates) return;
+    setState(() {
+      _checkingUpdates = true;
+      _updateStatus = 'Verificando...';
+    });
+
+    final updateService = ref.read(appUpdateServiceProvider);
+    try {
+      final info = await updateService.checkForUpdate();
+      if (!mounted) return;
+      if (info.hasUpdate) {
+        final nav = Navigator.of(context);
+        nav.pop();
+        await showDialog<void>(
+          context: nav.context,
+          builder: (_) =>
+              AppUpdateDialog(updateInfo: info, updateService: updateService),
+        );
+        return;
+      }
+      setState(() {
+        _checkingUpdates = false;
+        _updateStatus = info.latestTag.isEmpty
+            ? 'Sem releases'
+            : 'Atualizado (v${info.currentVersion})';
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _checkingUpdates = false;
+        _updateStatus = 'Falha ao consultar';
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final state = ref.watch(libraryControllerProvider);
     final controller = ref.read(libraryControllerProvider.notifier);
     final settings = state.settings;
@@ -887,6 +965,14 @@ class _SettingsDialog extends ConsumerWidget {
                           trailing: 'Purgar',
                           onActivate:
                               LifecycleMemoryManager.instance.purgeImageCache,
+                        ),
+                        const SizedBox(height: 8),
+                        _FocusableMenuRow(
+                          label: 'Verificar Atualizações',
+                          trailing: _checkingUpdates
+                              ? 'Verificando...'
+                              : (_updateStatus ?? 'GitHub Releases'),
+                          onActivate: _checkUpdatesManually,
                         ),
                         const SizedBox(height: 8),
                         _FocusableMenuRow(

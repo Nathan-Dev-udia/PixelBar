@@ -215,6 +215,14 @@ class NativeLauncherChannel implements LauncherGateway {
   }
 
   @override
+  Future<bool> installApk(String filePath) async {
+    final launched = await _channel.invokeMethod<bool>('installApk', {
+      'filePath': filePath,
+    });
+    return launched ?? false;
+  }
+
+  @override
   Future<DeviceProfile> getDeviceProfile() async {
     try {
       final raw = await _channel.invokeMethod<Map<Object?, Object?>>(

@@ -8,6 +8,7 @@ import '../../data/repositories/sqflite_game_library_repository.dart';
 import '../../data/sync/library_sync_service.dart';
 import '../../data/theme/theme_manifest_loader.dart';
 import '../../data/theme/theme_package_service.dart';
+import '../../data/update/app_update_service.dart';
 import '../../domain/models/game_item.dart';
 import '../../domain/models/launcher_settings.dart';
 import '../../domain/models/library_state.dart';
@@ -50,6 +51,10 @@ final themePackageServiceProvider = Provider<ThemePackageService>(
 
 final gameMetadataServiceProvider = Provider<GameMetadataService>(
   (ref) => GameMetadataService(),
+);
+
+final appUpdateServiceProvider = Provider<AppUpdateService>(
+  (ref) => AppUpdateService(gateway: ref.watch(launcherGatewayProvider)),
 );
 
 final libraryControllerProvider =

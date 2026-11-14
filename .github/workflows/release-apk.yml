@@ -53,7 +53,7 @@ jobs:
         run: flutter test
 
       - name: Build Android release APK (arm64)
-        run: flutter build apk --release --target-platform android-arm64 --build-number=${{ github.run_number }}
+        run: flutter build apk --release --target-platform android-arm64 --build-name=1.0.${{ github.run_number }} --build-number=${{ github.run_number }}
 
       - name: Prepare release artifact
         run: cp build/app/outputs/flutter-apk/app-release.apk build/app/outputs/flutter-apk/PixelBar-arm64.apk
@@ -61,7 +61,10 @@ jobs:
       - name: Publish Release to GitHub Releases
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v0.1.${{ github.run_number }}
-          name: PixelBar v0.1.${{ github.run_number }} (Android arm64)
+          tag_name: v1.0.${{ github.run_number }}
+          name: PixelBar v1.0.${{ github.run_number }} (Android arm64)
+          draft: false
+          prerelease: false
+          make_latest: 'true'
           generate_release_notes: true
           files: build/app/outputs/flutter-apk/PixelBar-arm64.apk

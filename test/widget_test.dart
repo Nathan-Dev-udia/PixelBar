@@ -11,6 +11,7 @@ import 'package:ondadeck/core/state/library_controller.dart';
 import 'package:ondadeck/data/metadata/game_metadata_service.dart';
 import 'package:ondadeck/data/theme/theme_package_service.dart';
 import 'package:ondadeck/data/theme/zip_archive_extractor.dart';
+import 'package:ondadeck/data/update/app_update_service.dart';
 import 'package:ondadeck/domain/models/emulator_profile.dart';
 import 'package:ondadeck/domain/models/game_item.dart';
 import 'package:ondadeck/domain/models/launch_config.dart';
@@ -23,6 +24,8 @@ import 'package:ondadeck/domain/repositories/launcher_gateway.dart';
 import 'package:ondadeck/main.dart';
 import 'package:ondadeck/themes/data_driven/data_driven_theme_engine.dart';
 import 'package:ondadeck/themes/manager/theme_manager_screen.dart';
+import 'package:ondadeck/themes/update/app_update_dialog.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path/path.dart' as p;
 
 class _FakeHibernationParticipant implements HibernationParticipant {
@@ -49,6 +52,8 @@ class _FakeLauncherGateway implements LauncherGateway {
   final SafEntry? pickedDirectory;
   final List<SafEntry> directoryEntries;
   final List<LaunchConfig> launchedConfigs = [];
+  final List<String> installedApkPaths = [];
+  bool installApkReturnValue = true;
 
   @override
   Future<List<InstalledApp>> getInstalledApps({bool gamesOnly = false}) async =>
@@ -113,6 +118,12 @@ class _FakeLauncherGateway implements LauncherGateway {
 
   @override
   Future<String> readText(String uri) async => '';
+
+  @override
+  Future<bool> installApk(String filePath) async {
+    installedApkPaths.add(filePath);
+    return installApkReturnValue;
+  }
 
   @override
   Future<DeviceProfile> getDeviceProfile() async => const DeviceProfile(
@@ -1378,6 +1389,248 @@ void main() {
         expect(container.read(libraryControllerProvider).theme.id, 'psp_xmb');
         expect(find.byType(ShaderBackground), findsOneWidget);
         expect(find.byType(OndaGridBackground), findsNothing);
+      },
+    );
+  });
+
+  group('Auto-Updater GitHub Releases', () {
+    test('parseBuildNumberFromTag extracts CI run_number accurately', () {
+      expect(AppUpdateService.parseBuildNumberFromTag('v1.0.14'), 14);
+      expect(AppUpdateService.parseBuildNumberFromTag('v0.1.3'), 3);
+      expect(AppUpdateService.parseBuildNumberFromTag('1.0.42+42'), 42);
+      expect(AppUpdateService.parseBuildNumberFromTag('build-7'), 7);
+      expect(AppUpdateService.parseBuildNumberFromTag(''), isNull);
+    });
+
+    test('cleanupStaleUpdates removes temporary APKs safely', () async {
+      final tempDir = await Directory.systemTemp.createTemp(
+        'ondadeck_update_cleanup_',
+      );
+      try {
+        final stale = File(p.join(tempDir.path, 'old.apk'));
+        final active = File(p.join(tempDir.path, 'current.apk'));
+        await stale.writeAsString('stale');
+        await active.writeAsString('active');
+
+        final gateway = _FakeLauncherGateway();
+        final service = AppUpdateService(
+          gateway: gateway,
+          updatesDirectory: tempDir,
+        );
+
+        await service.cleanupStaleUpdates(exceptPath: active.path);
+        expect(await stale.exists(), isFalse);
+        expect(await active.exists(), isTrue);
+
+        await service.cleanupStaleUpdates();
+        expect(await active.exists(), isFalse);
+      } finally {
+        if (await tempDir.exists()) {
+          await tempDir.delete(recursive: true);
+        }
+      }
+    });
+
+    testWidgets(
+      'AppUpdateDialog shows progress bar and triggers native installApk',
+      (tester) async {
+        tester.view.physicalSize = const Size(1920, 1080);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+
+        final gateway = _FakeLauncherGateway();
+        const updateInfo = AppUpdateInfo(
+          currentVersion: '1.0.0+1',
+          currentBuildNumber: 1,
+          latestTag: 'v1.0.12',
+          latestBuildNumber: 12,
+          releaseName: 'PixelBar v1.0.12 (Android arm64)',
+          releaseNotes: 'Correções e melhorias no auto-updater.',
+          downloadUrl:
+              'https://github.com/Nathan-Dev-udia/PixelBar/releases/download/v1.0.12/PixelBar-arm64.apk',
+          assetName: 'PixelBar-arm64.apk',
+          assetSizeBytes: 10 * 1024 * 1024,
+          hasUpdate: true,
+        );
+
+        var allowComplete = false;
+        final service = AppUpdateService(
+          gateway: gateway,
+          packageInfoLoader: () async => PackageInfo(
+            appName: 'OndaDeck',
+            packageName: 'com.ondapixel.ondadeck',
+            version: '1.0.0',
+            buildNumber: '1',
+          ),
+          downloadOverride: (info, {onProgress}) async {
+            onProgress?.call(0.5, 5 * 1024 * 1024, 10 * 1024 * 1024);
+            while (!allowComplete) {
+              await Future<void>.delayed(const Duration(milliseconds: 10));
+            }
+            onProgress?.call(1.0, 10 * 1024 * 1024, 10 * 1024 * 1024);
+            return gateway.installApk(
+              '/tmp/ondadeck_updates/PixelBar-arm64.apk',
+            );
+          },
+        );
+
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: Builder(
+                builder: (context) => ElevatedButton(
+                  onPressed: () => showDialog<void>(
+                    context: context,
+                    builder: (_) => AppUpdateDialog(
+                      updateInfo: updateInfo,
+                      updateService: service,
+                    ),
+                  ),
+                  child: const Text('Abrir Update'),
+                ),
+              ),
+            ),
+          ),
+        );
+
+        await tester.tap(find.text('Abrir Update'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('ATUALIZAÇÃO DISPONÍVEL'), findsOneWidget);
+        expect(find.text('v1.0.12'), findsOneWidget);
+        expect(find.text('Atualizar Agora'), findsOneWidget);
+
+        await tester.tap(find.text('Atualizar Agora'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 20));
+
+        expect(find.text('BAIXANDO ATUALIZAÇÃO'), findsOneWidget);
+        expect(find.byType(LinearProgressIndicator), findsOneWidget);
+        expect(find.textContaining('50%'), findsOneWidget);
+
+        allowComplete = true;
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 40)),
+        );
+        await tester.pumpAndSettle();
+
+        expect(gateway.installedApkPaths, [
+          '/tmp/ondadeck_updates/PixelBar-arm64.apk',
+        ]);
+        expect(find.text('BAIXANDO ATUALIZAÇÃO'), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'Settings manual update check opens AppUpdateDialog when release is newer',
+      (tester) async {
+        tester.view.physicalSize = const Size(1920, 1080);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.reset);
+        registerDefaultThemes();
+        LifecycleMemoryManager.instance.install();
+
+        final tempThemesDir = Directory.systemTemp.createTempSync(
+          'ondadeck_updater_themes_',
+        );
+        addTearDown(() {
+          if (tempThemesDir.existsSync()) {
+            tempThemesDir.deleteSync(recursive: true);
+          }
+        });
+
+        final gateway = _FakeLauncherGateway();
+        final repo = _InMemoryGameLibraryRepository(
+          initialSettings: const LauncherSettings(
+            reduceMotion: true,
+            autoImportGames: false,
+          ),
+        );
+        final packageService = ThemePackageService(
+          themesDirProvider: () async => tempThemesDir.path,
+        );
+        var startupChecked = false;
+        final service = AppUpdateService(
+          gateway: gateway,
+          checkOverride: () async {
+            if (!startupChecked) {
+              startupChecked = true;
+              return const AppUpdateInfo(
+                currentVersion: '1.0.0+1',
+                currentBuildNumber: 1,
+                latestTag: 'v1.0.1',
+                latestBuildNumber: 1,
+                releaseName: 'PixelBar v1.0.1',
+                releaseNotes: '',
+                downloadUrl: null,
+                assetName: 'PixelBar-arm64.apk',
+                assetSizeBytes: null,
+                hasUpdate: false,
+              );
+            }
+            return const AppUpdateInfo(
+              currentVersion: '1.0.0+1',
+              currentBuildNumber: 1,
+              latestTag: 'v1.0.25',
+              latestBuildNumber: 25,
+              releaseName: 'PixelBar v1.0.25 (Android arm64)',
+              releaseNotes: 'Auto-update via GitHub Releases.',
+              downloadUrl:
+                  'https://github.com/Nathan-Dev-udia/PixelBar/releases/download/v1.0.25/PixelBar-arm64.apk',
+              assetName: 'PixelBar-arm64.apk',
+              assetSizeBytes: 22 * 1024 * 1024,
+              hasUpdate: true,
+            );
+          },
+        );
+
+        late ProviderContainer container;
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              launcherGatewayProvider.overrideWithValue(gateway),
+              gameLibraryRepositoryProvider.overrideWithValue(repo),
+              themePackageServiceProvider.overrideWithValue(packageService),
+              appUpdateServiceProvider.overrideWithValue(service),
+            ],
+            child: Consumer(
+              builder: (context, ref, child) {
+                container = ProviderScope.containerOf(context);
+                return const OndaDeckApp();
+              },
+            ),
+          ),
+        );
+
+        for (var i = 0; i < 60; i++) {
+          await tester.runAsync(
+            () => Future<void>.delayed(const Duration(milliseconds: 25)),
+          );
+          await tester.pump();
+          final s = container.read(libraryControllerProvider);
+          if (startupChecked &&
+              s.status == LibraryStatus.ready &&
+              !s.isSyncing &&
+              s.lastSyncAt != null) {
+            break;
+          }
+        }
+        await tester.pumpAndSettle();
+
+        expect(find.text('ATUALIZAÇÃO DISPONÍVEL'), findsNothing);
+
+        await tester.sendKeyEvent(LogicalKeyboardKey.gameButtonStart);
+        await tester.pumpAndSettle();
+
+        expect(find.text('Verificar Atualizações'), findsOneWidget);
+        await tester.tap(find.text('Verificar Atualizações'));
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 40)),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text('ATUALIZAÇÃO DISPONÍVEL'), findsOneWidget);
+        expect(find.text('v1.0.25'), findsOneWidget);
       },
     );
   });
