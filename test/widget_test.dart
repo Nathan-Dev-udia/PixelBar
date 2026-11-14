@@ -36,10 +36,17 @@ class _FakeHibernationParticipant implements HibernationParticipant {
 }
 
 class _FakeLauncherGateway implements LauncherGateway {
-  _FakeLauncherGateway({this.installedApps = const [], this.pickedFile});
+  _FakeLauncherGateway({
+    this.installedApps = const [],
+    this.pickedFile,
+    this.pickedDirectory,
+    this.directoryEntries = const [],
+  });
 
   final List<InstalledApp> installedApps;
   final SafEntry? pickedFile;
+  final SafEntry? pickedDirectory;
+  final List<SafEntry> directoryEntries;
   final List<LaunchConfig> launchedConfigs = [];
 
   @override
@@ -62,7 +69,8 @@ class _FakeLauncherGateway implements LauncherGateway {
   }
 
   @override
-  Future<SafEntry?> pickDirectory({String? initialUri}) async => null;
+  Future<SafEntry?> pickDirectory({String? initialUri}) async =>
+      pickedDirectory;
 
   @override
   Future<SafEntry?> pickFile({List<String> mimeTypes = const ['*/*']}) async =>
@@ -87,7 +95,13 @@ class _FakeLauncherGateway implements LauncherGateway {
     Set<String>? extensions,
     int maxDepth = 6,
     int limit = 20000,
-  }) async => const [];
+  }) async {
+    if (extensions == null) return directoryEntries;
+    return [
+      for (final entry in directoryEntries)
+        if (!entry.isDirectory && extensions.contains(entry.extension)) entry,
+    ];
+  }
 
   @override
   Future<String> importArtwork(
@@ -111,8 +125,15 @@ class _FakeLauncherGateway implements LauncherGateway {
 }
 
 class _InMemoryGameLibraryRepository implements GameLibraryRepository {
+  _InMemoryGameLibraryRepository({
+    LauncherSettings initialSettings = const LauncherSettings(
+      reduceMotion: true,
+      autoImportGames: true,
+    ),
+  }) : _settings = initialSettings;
+
   final Map<String, GameItem> _games = {};
-  LauncherSettings _settings = const LauncherSettings(reduceMotion: true);
+  LauncherSettings _settings;
 
   @override
   Future<List<GameItem>> loadAll() async => _games.values.toList();
@@ -939,6 +960,8 @@ void main() {
         expect(find.text('Memory Stick™'), findsOneWidget);
         expect(find.text(': Options'), findsOneWidget);
         expect(find.text('Jogo'), findsOneWidget);
+        expect(find.text('Recentes'), findsNothing);
+        expect(find.text('Android'), findsNothing);
         expect(find.text('Alpha Game'), findsOneWidget);
         expect(find.text('BETA PORT'), findsOneWidget);
         expect(
@@ -1037,6 +1060,147 @@ void main() {
           find.text('Clássico de ação 16-bit com fases inéditas.'),
           findsOneWidget,
         );
+      },
+    );
+  });
+
+  group('Folder-only APK & game scanning', () {
+    testWidgets(
+      'does not auto-import phone APKs by default and scans only the chosen SAF folder',
+      (tester) async {
+        tester.view.physicalSize = const Size(1280, 720);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.reset);
+
+        LifecycleMemoryManager.instance.install();
+
+        final tempThemesDir = Directory.systemTemp.createTempSync(
+          'ondadeck_folder_test_',
+        );
+        addTearDown(() {
+          if (tempThemesDir.existsSync()) {
+            tempThemesDir.deleteSync(recursive: true);
+          }
+        });
+
+        final fakeGateway = _FakeLauncherGateway(
+          installedApps: const [
+            InstalledApp(
+              packageName: 'com.phone.gmail',
+              label: 'Gmail',
+              isGame: true,
+            ),
+            InstalledApp(
+              packageName: 'com.folder.game',
+              label: 'Folder APK Game',
+              isGame: true,
+            ),
+          ],
+          pickedDirectory: const SafEntry(
+            uri: 'content://tree/games',
+            name: 'MeusJogos',
+            isDirectory: true,
+          ),
+          directoryEntries: const [
+            SafEntry(
+              uri: 'content://tree/games/doc/1',
+              name: 'FolderGame.apk',
+              isDirectory: false,
+              apkPackageName: 'com.folder.game',
+              apkLabel: 'Folder APK Game',
+              apkInstalled: true,
+            ),
+            SafEntry(
+              uri: 'content://tree/games/doc/2',
+              name: 'Sonic.iso',
+              isDirectory: false,
+            ),
+            SafEntry(
+              uri: 'content://tree/games/doc/3',
+              name: 'readme.txt',
+              isDirectory: false,
+            ),
+          ],
+        );
+        final fakeRepo = _InMemoryGameLibraryRepository(
+          initialSettings: const LauncherSettings(reduceMotion: true),
+        );
+        final packageService = ThemePackageService(
+          themesDirProvider: () async => tempThemesDir.path,
+        );
+
+        late ProviderContainer container;
+
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              launcherGatewayProvider.overrideWithValue(fakeGateway),
+              gameLibraryRepositoryProvider.overrideWithValue(fakeRepo),
+              themePackageServiceProvider.overrideWithValue(packageService),
+            ],
+            child: Consumer(
+              builder: (context, ref, child) {
+                container = ProviderScope.containerOf(context);
+                return const OndaDeckApp();
+              },
+            ),
+          ),
+        );
+
+        for (var i = 0; i < 60; i++) {
+          await tester.runAsync(
+            () => Future<void>.delayed(const Duration(milliseconds: 25)),
+          );
+          await tester.pump();
+          final s = container.read(libraryControllerProvider);
+          if (s.status == LibraryStatus.ready &&
+              !s.isSyncing &&
+              s.lastSyncAt != null) {
+            break;
+          }
+        }
+        await tester.pumpAndSettle();
+
+        // Phone APKs must NOT be auto-imported when no folder is configured.
+        expect(container.read(libraryControllerProvider).totalGames, 0);
+        expect(find.text('Gmail'), findsNothing);
+
+        // User chooses the SAF games folder -> only APKs & ROMs inside it load.
+        await tester.runAsync(
+          () => container
+              .read(libraryControllerProvider.notifier)
+              .pickAndSyncGamesFolder(),
+        );
+        for (var i = 0; i < 60; i++) {
+          await tester.runAsync(
+            () => Future<void>.delayed(const Duration(milliseconds: 25)),
+          );
+          await tester.pump();
+          final s = container.read(libraryControllerProvider);
+          if (!s.isSyncing && s.totalGames == 2) {
+            break;
+          }
+        }
+        await tester.pumpAndSettle();
+
+        final state = container.read(libraryControllerProvider);
+        expect(state.settings.gamesFolderUri, 'content://tree/games');
+        expect(state.settings.gamesFolderName, 'MeusJogos');
+        expect(state.totalGames, 2);
+        expect(
+          state.categories.map((c) => c.title),
+          isNot(contains('Recentes')),
+        );
+        expect(
+          state.categories.map((c) => c.title),
+          isNot(contains('Android')),
+        );
+        expect(state.categories.first.title, 'Jogos');
+        expect(
+          state.categories.first.games.map((g) => g.title),
+          containsAll(['Folder APK Game', 'Sonic']),
+        );
+        expect(find.text('Gmail'), findsNothing);
       },
     );
   });

@@ -203,6 +203,7 @@ class LibraryController extends Notifier<LibraryState> {
     try {
       final synced = await _syncService.syncInstalledApps(
         autoImportGames: state.settings.autoImportGames,
+        gamesFolderUri: state.settings.gamesFolderUri,
       );
       if (!ref.mounted) return;
 
@@ -221,9 +222,28 @@ class LibraryController extends Notifier<LibraryState> {
       if (!ref.mounted) return;
       state = state.copyWith(
         isSyncing: false,
-        errorMessage: 'Falha ao sincronizar aplicativos: $e',
+        errorMessage: 'Falha ao sincronizar jogos da pasta: $e',
       );
     }
+  }
+
+  /// Opens the native Android SAF folder picker and scans APKs/ROMs from the
+  /// chosen directory only.
+  Future<SafEntry?> pickAndSyncGamesFolder() async {
+    final picked = await _gateway.pickDirectory(
+      initialUri: state.settings.gamesFolderUri,
+    );
+    if (picked == null || !ref.mounted) return null;
+
+    final nextSettings = state.settings.copyWith(
+      gamesFolderUri: picked.uri,
+      gamesFolderName: picked.name.isEmpty ? picked.uri : picked.name,
+    );
+    await updateSettings(nextSettings);
+    if (!ref.mounted) return picked;
+
+    await refreshInstalledApps();
+    return picked;
   }
 
   void selectGame(GameItem game) {

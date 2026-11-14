@@ -212,9 +212,9 @@ class _Ps3XmbViewState extends State<Ps3XmbView> {
       _XmbColumnKind.addGames => [
         _XmbActionOption(
           id: 'add_app',
-          title: 'Adicionar Jogo / App / Port',
-          subtitle: 'Selecionar APK ou port recomp instalado',
-          icon: Icons.add_box_rounded,
+          title: 'Pasta de Jogos (APKs / ROMs)',
+          subtitle: 'Escolher pasta para escanear APKs e ROMs',
+          icon: Icons.folder_open_rounded,
           onTrigger: widget.onAddApps ?? widget.onOpenSettings,
         ),
         if (widget.selectedGame != null && widget.onToggleFavorite != null)
@@ -247,8 +247,8 @@ class _Ps3XmbViewState extends State<Ps3XmbView> {
           ),
         _XmbActionOption(
           id: 'rescan_add',
-          title: 'Detectar Novos Pacotes',
-          subtitle: 'Escanear apps marcados como jogos no Android',
+          title: 'Reescanear Pasta de Jogos',
+          subtitle: 'Buscar novos APKs e ROMs na pasta configurada',
           icon: Icons.manage_search_rounded,
           onTrigger: widget.onRescan,
         ),
@@ -332,9 +332,9 @@ class _Ps3XmbViewState extends State<Ps3XmbView> {
       if (widget.onAddApps != null)
         _XmbActionOption(
           id: 'drawer_add',
-          title: 'Adicionar App / Port',
-          subtitle: 'Incluir aplicativo manualmente',
-          icon: Icons.add_box_outlined,
+          title: 'Escolher Pasta de Jogos',
+          subtitle: 'Configurar pasta de APKs e ROMs',
+          icon: Icons.folder_open_outlined,
           onTrigger: () {
             setState(() => _optionsOpen = false);
             widget.onAddApps!();
@@ -645,7 +645,7 @@ class _Ps3XmbViewState extends State<Ps3XmbView> {
                   ),
                 ),
 
-              // Bottom-left quick category strip + bottom-right PSP legend with △ : Options.
+              // Bottom-right PSP action hints with △ : Options (no bottom category bar).
               Positioned(
                 left: compact ? 12 : 24,
                 right: compact ? 12 : 28,
@@ -653,75 +653,7 @@ class _Ps3XmbViewState extends State<Ps3XmbView> {
                 child: ExcludeFocus(
                   child: Row(
                     children: [
-                      Expanded(
-                        child: SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          child: Row(
-                            children: [
-                              for (var i = 0; i < widget.categories.length; i++)
-                                Padding(
-                                  padding: const EdgeInsets.only(right: 8),
-                                  child: GestureDetector(
-                                    onTap: () {
-                                      widget.onSelectCategory(i);
-                                      _selectColumn(_XmbColumnKind.games);
-                                    },
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 10,
-                                        vertical: 4,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color:
-                                            i == widget.categoryIndex &&
-                                                _activeColumn ==
-                                                    _XmbColumnKind.games
-                                            ? widget.glowColor.withValues(
-                                                alpha: 0.22,
-                                              )
-                                            : Colors.black.withValues(
-                                                alpha: 0.22,
-                                              ),
-                                        borderRadius: BorderRadius.circular(4),
-                                        border: Border.all(
-                                          color:
-                                              i == widget.categoryIndex &&
-                                                  _activeColumn ==
-                                                      _XmbColumnKind.games
-                                              ? widget.glowColor.withValues(
-                                                  alpha: 0.85,
-                                                )
-                                              : widget.fgColor.withValues(
-                                                  alpha: 0.16,
-                                                ),
-                                        ),
-                                      ),
-                                      child: Text(
-                                        widget.categories[i].title,
-                                        style: TextStyle(
-                                          color:
-                                              i == widget.categoryIndex &&
-                                                  _activeColumn ==
-                                                      _XmbColumnKind.games
-                                              ? widget.glowColor
-                                              : widget.mutedColor,
-                                          fontSize: 11,
-                                          fontWeight:
-                                              i == widget.categoryIndex &&
-                                                  _activeColumn ==
-                                                      _XmbColumnKind.games
-                                              ? FontWeight.w600
-                                              : FontWeight.normal,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
+                      const Spacer(),
                       if (widget.selectedGame != null) ...[
                         _PspButtonHint(
                           symbol: '✕',
@@ -2296,8 +2228,8 @@ class _PspEmptyGamesSpine extends StatelessWidget {
             children: [
               _PspPillButton(
                 focusNode: addNode,
-                label: 'Adicionar App [X]',
-                icon: Icons.add_box_outlined,
+                label: 'Pasta de Jogos [X]',
+                icon: Icons.folder_open_outlined,
                 accentColor: accentColor,
                 fgColor: fgColor,
                 surfaceColor: surfaceColor,

@@ -322,7 +322,12 @@ class _DataDrivenThemeEngineState extends State<DataDrivenThemeEngine> {
       },
       child: Scaffold(
         backgroundColor: bgColor,
-        body: SafeArea(
+        body: MediaQuery.removePadding(
+          context: context,
+          removeLeft: true,
+          removeTop: true,
+          removeRight: true,
+          removeBottom: true,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [

@@ -72,6 +72,10 @@ class SafEntry {
     this.size,
     this.lastModified,
     this.persisted = false,
+    this.apkPackageName,
+    this.apkLabel,
+    this.apkIconPath,
+    this.apkInstalled = false,
   });
 
   final String uri;
@@ -83,6 +87,12 @@ class SafEntry {
 
   /// Whether `takePersistableUriPermission` succeeded (survives reboots).
   final bool persisted;
+
+  /// Metadata extracted natively when the entry is an `.apk` archive.
+  final String? apkPackageName;
+  final String? apkLabel;
+  final String? apkIconPath;
+  final bool apkInstalled;
 
   String get extension {
     final dot = name.lastIndexOf('.');
@@ -97,6 +107,10 @@ class SafEntry {
     size: (map['size'] as num?)?.toInt(),
     lastModified: _millis(map['lastModified']),
     persisted: map['persisted'] as bool? ?? false,
+    apkPackageName: map['apkPackageName'] as String?,
+    apkLabel: map['apkLabel'] as String?,
+    apkIconPath: map['apkIconPath'] as String?,
+    apkInstalled: map['apkInstalled'] as bool? ?? false,
   );
 }
 

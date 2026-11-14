@@ -1,8 +1,17 @@
+import java.io.FileInputStream
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("kotlin-android")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
+}
+
+val keystoreProperties = Properties()
+val keystorePropertiesFile = rootProject.file("key.properties")
+if (keystorePropertiesFile.exists()) {
+    FileInputStream(keystorePropertiesFile).use { keystoreProperties.load(it) }
 }
 
 android {
@@ -30,11 +39,42 @@ android {
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        create("release") {
+            val resolvedStoreFile = keystoreProperties.getProperty("storeFile")
+                ?: System.getenv("KEYSTORE_FILE")
+            val resolvedStorePassword = keystoreProperties.getProperty("storePassword")
+                ?: System.getenv("KEYSTORE_PASSWORD")
+            val resolvedKeyAlias = keystoreProperties.getProperty("keyAlias")
+                ?: System.getenv("KEY_ALIAS")
+            val resolvedKeyPassword = keystoreProperties.getProperty("keyPassword")
+                ?: System.getenv("KEY_PASSWORD")
+
+            if (!resolvedStoreFile.isNullOrBlank()) {
+                storeFile = file(resolvedStoreFile)
+            }
+            if (!resolvedStorePassword.isNullOrBlank()) {
+                storePassword = resolvedStorePassword
+            }
+            if (!resolvedKeyAlias.isNullOrBlank()) {
+                keyAlias = resolvedKeyAlias
+            }
+            if (!resolvedKeyPassword.isNullOrBlank()) {
+                keyPassword = resolvedKeyPassword
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            val releaseSigning = signingConfigs.getByName("release")
+            signingConfig = if (releaseSigning.storeFile?.exists() == true &&
+                (releaseSigning.storeFile?.length() ?: 0L) > 0L
+            ) {
+                releaseSigning
+            } else {
+                signingConfigs.getByName("debug")
+            }
         }
     }
 }

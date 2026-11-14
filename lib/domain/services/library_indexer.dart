@@ -29,14 +29,8 @@ abstract final class LibraryIndexer {
         if (settings.showHidden || !g.hidden) g,
     ]..sort(_comparator(settings.sortMode));
 
-    final recent = [
-      for (final g in visible)
-        if (g.lastPlayedAt != null) g,
-    ]..sort((a, b) => b.lastPlayedAt!.compareTo(a.lastPlayedAt!));
-
     final byCustom = <String, List<GameItem>>{};
     final recomp = <GameItem>[];
-    final android = <GameItem>[];
     final byPlatform = <String, List<GameItem>>{};
     for (final g in visible) {
       if (g.categoryOverride case final custom?) {
@@ -47,7 +41,7 @@ abstract final class LibraryIndexer {
         case GameKind.recompPort:
           recomp.add(g);
         case GameKind.androidNative:
-          android.add(g);
+          break;
         case GameKind.emulated:
           (byPlatform[g.platform] ??= []).add(g);
       }
@@ -56,12 +50,12 @@ abstract final class LibraryIndexer {
     final platformKeys = byPlatform.keys.toList()..sort();
     final customKeys = byCustom.keys.toList()..sort();
     return [
-      if (recent.isNotEmpty)
+      if (visible.isNotEmpty)
         GameCategory(
-          id: 'recent',
-          title: 'Recentes',
-          kind: CategoryKind.recent,
-          games: recent.take(recentLimit).toList(),
+          id: 'games',
+          title: 'Jogos',
+          kind: CategoryKind.recomp,
+          games: visible,
         ),
       if (visible.any((g) => g.favorite))
         GameCategory(
@@ -79,13 +73,6 @@ abstract final class LibraryIndexer {
           title: 'Ports (Recomp)',
           kind: CategoryKind.recomp,
           games: recomp,
-        ),
-      if (android.isNotEmpty)
-        GameCategory(
-          id: 'android',
-          title: 'Android',
-          kind: CategoryKind.android,
-          games: android,
         ),
       for (final p in platformKeys)
         GameCategory(

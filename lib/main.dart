@@ -7,7 +7,6 @@ import 'core/memory/lifecycle_memory_manager.dart';
 import 'core/state/library_controller.dart';
 import 'domain/models/game_item.dart';
 import 'domain/models/launcher_settings.dart';
-import 'domain/models/platform_models.dart';
 import 'themes/console_theme_widget.dart';
 import 'themes/data_driven/data_driven_theme_engine.dart';
 import 'themes/manager/theme_manager_screen.dart';
@@ -181,34 +180,21 @@ class _OndaDeckShell extends ConsumerWidget {
   );
 }
 
-class _ManualAppPickerDialog extends ConsumerStatefulWidget {
+class _ManualAppPickerDialog extends ConsumerWidget {
   const _ManualAppPickerDialog();
 
   @override
-  ConsumerState<_ManualAppPickerDialog> createState() =>
-      _ManualAppPickerDialogState();
-}
-
-class _ManualAppPickerDialogState
-    extends ConsumerState<_ManualAppPickerDialog> {
-  late Future<List<InstalledApp>> _appsFuture;
-  GameKind _selectedKind = GameKind.androidNative;
-
-  @override
-  void initState() {
-    super.initState();
-    _appsFuture = ref
-        .read(launcherGatewayProvider)
-        .getInstalledApps(gamesOnly: false);
-  }
-
-  @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final libraryState = ref.watch(libraryControllerProvider);
-    final existingById = <String, GameItem>{
+    final controller = ref.read(libraryControllerProvider.notifier);
+    final settings = libraryState.settings;
+    final gamesById = <String, GameItem>{
       for (final c in libraryState.categories)
         for (final g in c.games) g.id: g,
     };
+    final games = gamesById.values.toList();
+    final hasFolder =
+        settings.gamesFolderUri != null && settings.gamesFolderUri!.isNotEmpty;
 
     return Actions(
       actions: {
@@ -233,91 +219,81 @@ class _ManualAppPickerDialogState
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Row(
-                  children: [
-                    const Expanded(
-                      child: Text(
-                        'ADICIONAR APP INSTALADO',
-                        style: TextStyle(
-                          color: Color(0xFF00E5FF),
-                          fontFamily: 'monospace',
-                          fontSize: 15,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                    _FocusableMenuRow(
-                      autofocus: true,
-                      label: _selectedKind == GameKind.recompPort
-                          ? 'Tipo: Port Recomp'
-                          : 'Tipo: Android Nativo',
-                      trailing: 'Trocar [A]',
-                      compact: true,
-                      onActivate: () {
-                        setState(() {
-                          _selectedKind =
-                              _selectedKind == GameKind.androidNative
-                              ? GameKind.recompPort
-                              : GameKind.androidNative;
-                        });
-                      },
-                    ),
-                  ],
+                const Text(
+                  'PASTA DE JOGOS (APKS & ROMS)',
+                  style: TextStyle(
+                    color: Color(0xFF00E5FF),
+                    fontFamily: 'monospace',
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Pasta ativa: ${settings.gamesFolderName ?? 'Nenhuma pasta selecionada'}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Color(0xFF8C96A5),
+                    fontFamily: 'monospace',
+                    fontSize: 12,
+                  ),
                 ),
                 const SizedBox(height: 12),
-                Expanded(
-                  child: FutureBuilder<List<InstalledApp>>(
-                    future: _appsFuture,
-                    builder: (context, snapshot) {
-                      if (snapshot.connectionState == ConnectionState.waiting) {
-                        return const Center(child: CircularProgressIndicator());
-                      }
-                      final apps = snapshot.data ?? const [];
-                      if (apps.isEmpty) {
-                        return const Center(
-                          child: Text(
-                            'Nenhum aplicativo encontrado no dispositivo.',
-                            style: TextStyle(color: Color(0xFF8C96A5)),
-                          ),
-                        );
-                      }
-                      return ListView.separated(
-                        itemCount: apps.length,
-                        separatorBuilder: (_, _) => const SizedBox(height: 6),
-                        itemBuilder: (context, index) {
-                          final app = apps[index];
-                          final existing =
-                              existingById[GameItem.idForPackage(
-                                app.packageName,
-                              )];
-                          final isAdded = existing != null;
-                          return _FocusableMenuRow(
-                            label: app.label,
-                            subtitle: isAdded
-                                ? '${app.packageName} • ADICIONADO'
-                                : '${app.packageName}${app.isGame ? ' • GAME' : ''}',
-                            trailing: isAdded ? 'Retirar [A]' : 'Adicionar [A]',
-                            onActivate: () async {
-                              final notifier = ref.read(
-                                libraryControllerProvider.notifier,
-                              );
-                              if (isAdded) {
-                                await notifier.removeGame(existing);
-                              } else {
-                                await notifier.addManualApp(
-                                  app,
-                                  kind: _selectedKind,
-                                );
-                                if (context.mounted) {
-                                  Navigator.of(context).pop();
-                                }
-                              }
-                            },
-                          );
-                        },
-                      );
+                _FocusableMenuRow(
+                  autofocus: true,
+                  label: 'Escolher Pasta de Jogos',
+                  subtitle:
+                      'OndaDeck importa apenas APKs e ROMs desta pasta (via SAF)',
+                  trailing: '[A]',
+                  onActivate: () async {
+                    await controller.pickAndSyncGamesFolder();
+                  },
+                ),
+                if (hasFolder) ...[
+                  const SizedBox(height: 8),
+                  _FocusableMenuRow(
+                    label: 'Reescanear Pasta',
+                    trailing: libraryState.isSyncing
+                        ? 'Sincronizando...'
+                        : '[R]',
+                    onActivate: () async {
+                      await controller.refreshInstalledApps();
                     },
                   ),
+                ],
+                const SizedBox(height: 12),
+                Expanded(
+                  child: games.isEmpty
+                      ? Center(
+                          child: Text(
+                            hasFolder
+                                ? 'Nenhum arquivo APK ou ROM encontrado nesta pasta.'
+                                : 'Nenhuma pasta selecionada. Escolha uma pasta com seus APKs ou ROMs.',
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(color: Color(0xFF8C96A5)),
+                          ),
+                        )
+                      : ListView.separated(
+                          itemCount: games.length,
+                          separatorBuilder: (_, _) => const SizedBox(height: 6),
+                          itemBuilder: (context, index) {
+                            final game = games[index];
+                            final originLabel =
+                                game.source == GameSource.scanned
+                                ? 'DA PASTA'
+                                : 'MANUAL';
+                            return _FocusableMenuRow(
+                              label: game.title,
+                              subtitle:
+                                  '${game.platform.toUpperCase()} • $originLabel',
+                              trailing: 'Retirar [A]',
+                              onActivate: () async {
+                                await controller.removeGame(game);
+                              },
+                            );
+                          },
+                        ),
                 ),
                 const SizedBox(height: 10),
                 const Text(
@@ -400,13 +376,11 @@ class _SettingsDialog extends ConsumerWidget {
                         ),
                         const SizedBox(height: 8),
                         _FocusableMenuRow(
-                          label: 'Importar jogos Android automaticamente',
-                          trailing: settings.autoImportGames ? 'ON' : 'OFF',
-                          onActivate: () => controller.updateSettings(
-                            settings.copyWith(
-                              autoImportGames: !settings.autoImportGames,
-                            ),
-                          ),
+                          label: 'Pasta de Jogos (APKs / ROMs)',
+                          trailing: settings.gamesFolderName ?? 'Selecionar',
+                          onActivate: () async {
+                            await controller.pickAndSyncGamesFolder();
+                          },
                         ),
                         const SizedBox(height: 8),
                         _FocusableMenuRow(
@@ -446,7 +420,7 @@ class _SettingsDialog extends ConsumerWidget {
                         ),
                         const SizedBox(height: 8),
                         _FocusableMenuRow(
-                          label: 'Reescanear aplicativos instalados',
+                          label: 'Reescanear pasta de jogos',
                           trailing: state.isSyncing
                               ? 'Sincronizando...'
                               : 'Executar',
@@ -488,7 +462,6 @@ class _FocusableMenuRow extends StatefulWidget {
     required this.onActivate,
     this.subtitle,
     this.autofocus = false,
-    this.compact = false,
   });
 
   final String label;
@@ -496,7 +469,6 @@ class _FocusableMenuRow extends StatefulWidget {
   final String trailing;
   final VoidCallback onActivate;
   final bool autofocus;
-  final bool compact;
 
   @override
   State<_FocusableMenuRow> createState() => _FocusableMenuRowState();
@@ -532,10 +504,7 @@ class _FocusableMenuRowState extends State<_FocusableMenuRow> {
       child: GestureDetector(
         onTap: widget.onActivate,
         child: Container(
-          padding: EdgeInsets.symmetric(
-            horizontal: widget.compact ? 12 : 14,
-            vertical: widget.compact ? 6 : 10,
-          ),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
           decoration: BoxDecoration(
             color: _focused
                 ? const Color(0xFF00E5FF).withValues(alpha: 0.16)
@@ -549,47 +518,34 @@ class _FocusableMenuRowState extends State<_FocusableMenuRow> {
             borderRadius: BorderRadius.circular(6),
           ),
           child: Row(
-            mainAxisSize: widget.compact ? MainAxisSize.min : MainAxisSize.max,
             children: [
-              if (widget.compact)
-                Text(
-                  widget.label,
-                  style: TextStyle(
-                    color: _focused
-                        ? const Color(0xFF00E5FF)
-                        : const Color(0xFFE6E6E6),
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                  ),
-                )
-              else
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        widget.label,
-                        style: TextStyle(
-                          color: _focused
-                              ? const Color(0xFF00E5FF)
-                              : const Color(0xFFE6E6E6),
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                        ),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      widget.label,
+                      style: TextStyle(
+                        color: _focused
+                            ? const Color(0xFF00E5FF)
+                            : const Color(0xFFE6E6E6),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
                       ),
-                      if (widget.subtitle case final sub?)
-                        Text(
-                          sub,
-                          style: const TextStyle(
-                            color: Color(0xFF7D8796),
-                            fontFamily: 'monospace',
-                            fontSize: 11,
-                          ),
-                          overflow: TextOverflow.ellipsis,
+                    ),
+                    if (widget.subtitle case final sub?)
+                      Text(
+                        sub,
+                        style: const TextStyle(
+                          color: Color(0xFF7D8796),
+                          fontFamily: 'monospace',
+                          fontSize: 11,
                         ),
-                    ],
-                  ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                  ],
                 ),
+              ),
               const SizedBox(width: 12),
               Text(
                 widget.trailing,

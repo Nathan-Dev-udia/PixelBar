@@ -15,6 +15,7 @@ import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
+import android.graphics.drawable.Drawable
 import android.net.Uri
 import android.os.Build
 import android.os.Handler
@@ -327,7 +328,11 @@ class LauncherPlugin(
         val grantRead = args["grantUriRead"] as? Boolean ?: true
         val grantWrite = args["grantUriWrite"] as? Boolean ?: false
 
-        if (!packageName.isNullOrBlank() && getPackageInfoCompat(packageName) == null) {
+        val isApkIntent = type == "intent" && (
+            mimeType == "application/vnd.android.package-archive" ||
+                (dataUri?.lowercase()?.endsWith(".apk") == true)
+            )
+        if (!isApkIntent && !packageName.isNullOrBlank() && getPackageInfoCompat(packageName) == null) {
             result.error("NOT_INSTALLED", "Package not installed: $packageName", null)
             return
         }
@@ -354,30 +359,50 @@ class LauncherPlugin(
                 }
             }
             "intent" -> {
-                val built = Intent(action ?: Intent.ACTION_VIEW)
-                val parsedUri = dataUri?.takeIf { it.isNotBlank() }?.let { Uri.parse(it) }
-                when {
-                    parsedUri != null && !mimeType.isNullOrBlank() -> built.setDataAndType(parsedUri, mimeType)
-                    parsedUri != null -> built.data = parsedUri
-                    !mimeType.isNullOrBlank() -> built.type = mimeType
-                }
-                if (!packageName.isNullOrBlank()) {
-                    if (!activityName.isNullOrBlank()) {
-                        built.component = ComponentName(packageName, resolveActivityName(packageName, activityName))
+                val installedApkPkg = if (isApkIntent) {
+                    if (!packageName.isNullOrBlank() && getPackageInfoCompat(packageName) != null) {
+                        packageName
+                    } else if (!dataUri.isNullOrBlank()) {
+                        resolveInstalledPackageFromApkUri(Uri.parse(dataUri))
                     } else {
-                        built.`package` = packageName
+                        null
                     }
+                } else {
+                    null
                 }
-                for (cat in categories) {
-                    built.addCategory(cat)
+                val installedLaunchIntent = installedApkPkg?.let { pkg ->
+                    val pm = activity.packageManager
+                    pm.getLaunchIntentForPackage(pkg) ?: pm.getLeanbackLaunchIntentForPackage(pkg)
                 }
-                applyExtras(built, extras)
-                if (parsedUri != null && parsedUri.scheme == "content" && (grantRead || grantWrite)) {
-                    built.clipData = ClipData.newRawUri(null, parsedUri)
-                    if (grantRead) built.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                    if (grantWrite) built.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+                if (installedLaunchIntent != null) {
+                    installedLaunchIntent
+                } else {
+                    val built = Intent(action ?: Intent.ACTION_VIEW)
+                    val parsedUri = dataUri?.takeIf { it.isNotBlank() }?.let { Uri.parse(it) }
+                    val effectiveMime = if (isApkIntent) "application/vnd.android.package-archive" else mimeType
+                    when {
+                        parsedUri != null && !effectiveMime.isNullOrBlank() -> built.setDataAndType(parsedUri, effectiveMime)
+                        parsedUri != null -> built.data = parsedUri
+                        !effectiveMime.isNullOrBlank() -> built.type = effectiveMime
+                    }
+                    if (!isApkIntent && !packageName.isNullOrBlank()) {
+                        if (!activityName.isNullOrBlank()) {
+                            built.component = ComponentName(packageName, resolveActivityName(packageName, activityName))
+                        } else {
+                            built.`package` = packageName
+                        }
+                    }
+                    for (cat in categories) {
+                        built.addCategory(cat)
+                    }
+                    applyExtras(built, extras)
+                    if (parsedUri != null && parsedUri.scheme == "content" && (grantRead || grantWrite || isApkIntent)) {
+                        built.clipData = ClipData.newRawUri(null, parsedUri)
+                        if (grantRead || isApkIntent) built.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        if (grantWrite) built.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+                    }
+                    built
                 }
-                built
             }
             else -> {
                 result.error("INVALID_CONFIG", "Unknown launch type: $type", null)
@@ -619,21 +644,176 @@ class LauncherPlugin(
                     }
 
                     val docUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, docId)
-                    entries.add(
-                        mapOf(
-                            "uri" to docUri.toString(),
-                            "name" to name,
-                            "isDirectory" to false,
-                            "mimeType" to mime,
-                            "size" to size,
-                            "lastModified" to mod,
-                            "persisted" to true,
-                        )
-                    )
+                    val dotIdx = name.lastIndexOf('.')
+                    val fileExt = if (dotIdx >= 0) name.substring(dotIdx + 1).lowercase() else ""
+                    val apkMeta = if (fileExt == "apk") {
+                        inspectApkDocument(docUri, docId, name)
+                    } else {
+                        null
+                    }
+                    val entryMap = HashMap<String, Any?>(11).apply {
+                        put("uri", docUri.toString())
+                        put("name", name)
+                        put("isDirectory", false)
+                        put("mimeType", mime)
+                        put("size", size)
+                        put("lastModified", mod)
+                        put("persisted", true)
+                        if (apkMeta != null) {
+                            putAll(apkMeta)
+                        }
+                    }
+                    entries.add(entryMap)
                 }
             }
         }
         return entries
+    }
+
+    private fun getArchivePackageInfoCompat(archivePath: String): PackageInfo? {
+        val pm = activity.packageManager
+        return try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                pm.getPackageArchiveInfo(archivePath, PackageManager.PackageInfoFlags.of(0L))
+            } else {
+                @Suppress("DEPRECATION")
+                pm.getPackageArchiveInfo(archivePath, 0)
+            }
+        } catch (_: Throwable) {
+            null
+        }
+    }
+
+    private fun inspectApkDocument(docUri: Uri, docId: String, fileName: String): Map<String, Any?> {
+        val pm = activity.packageManager
+        var pkgName: String? = null
+        var label: String? = null
+        var iconPath: String? = null
+
+        try {
+            activity.contentResolver.openFileDescriptor(docUri, "r")?.use { pfd ->
+                val fdPath = "/proc/self/fd/${pfd.fd}"
+                val info = getArchivePackageInfoCompat(fdPath)
+                if (info != null) {
+                    pkgName = info.packageName
+                    val appInfo = info.applicationInfo
+                    if (appInfo != null) {
+                        appInfo.sourceDir = fdPath
+                        appInfo.publicSourceDir = fdPath
+                        label = appInfo.loadLabel(pm).toString().takeIf { it.isNotBlank() }
+                        iconPath = renderDrawableToIconFile(
+                            appInfo.loadIcon(pm),
+                            "apk_${sha256(pkgName ?: docUri.toString())}_192.png",
+                            192,
+                        )
+                    }
+                }
+            }
+        } catch (_: Throwable) {
+            // Fall through to path-based fallback.
+        }
+
+        if (pkgName == null && docId.startsWith("primary:")) {
+            val rawPath = "/storage/emulated/0/${docId.substringAfter("primary:")}"
+            try {
+                if (File(rawPath).canRead()) {
+                    val info = getArchivePackageInfoCompat(rawPath)
+                    if (info != null) {
+                        pkgName = info.packageName
+                        val appInfo = info.applicationInfo
+                        if (appInfo != null) {
+                            appInfo.sourceDir = rawPath
+                            appInfo.publicSourceDir = rawPath
+                            label = label ?: appInfo.loadLabel(pm).toString().takeIf { it.isNotBlank() }
+                            if (iconPath == null) {
+                                iconPath = renderDrawableToIconFile(
+                                    appInfo.loadIcon(pm),
+                                    "apk_${sha256(pkgName ?: docUri.toString())}_192.png",
+                                    192,
+                                )
+                            }
+                        }
+                    }
+                }
+            } catch (_: Throwable) {
+                // Ignore inaccessible direct storage paths.
+            }
+        }
+
+        val resolvedPkg = pkgName
+        val installed = if (resolvedPkg != null && getPackageInfoCompat(resolvedPkg) != null) {
+            if (iconPath == null) {
+                iconPath = getAppIcons(listOf(resolvedPkg), 192)[resolvedPkg]
+            }
+            if (label == null) {
+                val installedInfo = getPackageInfoCompat(resolvedPkg)?.applicationInfo
+                if (installedInfo != null) {
+                    label = pm.getApplicationLabel(installedInfo).toString().takeIf { it.isNotBlank() }
+                }
+            }
+            true
+        } else {
+            false
+        }
+
+        val fallbackLabel = fileName.substringBeforeLast('.').ifBlank { fileName }
+        return mapOf(
+            "apkPackageName" to pkgName,
+            "apkLabel" to (label ?: fallbackLabel),
+            "apkIconPath" to iconPath,
+            "apkInstalled" to installed,
+        )
+    }
+
+    private fun resolveInstalledPackageFromApkUri(uri: Uri): String? {
+        try {
+            activity.contentResolver.openFileDescriptor(uri, "r")?.use { pfd ->
+                val pkg = getArchivePackageInfoCompat("/proc/self/fd/${pfd.fd}")?.packageName
+                if (!pkg.isNullOrBlank() && getPackageInfoCompat(pkg) != null) {
+                    return pkg
+                }
+            }
+        } catch (_: Throwable) {
+            // Try document path fallback below.
+        }
+        try {
+            if (DocumentsContract.isDocumentUri(activity, uri)) {
+                val docId = DocumentsContract.getDocumentId(uri)
+                if (docId.startsWith("primary:")) {
+                    val rawPath = "/storage/emulated/0/${docId.substringAfter("primary:")}"
+                    val pkg = getArchivePackageInfoCompat(rawPath)?.packageName
+                    if (!pkg.isNullOrBlank() && getPackageInfoCompat(pkg) != null) {
+                        return pkg
+                    }
+                }
+            }
+        } catch (_: Throwable) {
+            // Ignore.
+        }
+        return null
+    }
+
+    private fun renderDrawableToIconFile(drawable: Drawable?, fileName: String, sizePx: Int): String? {
+        if (drawable == null) return null
+        val dir = File(activity.filesDir, "icons").apply { mkdirs() }
+        val file = File(dir, fileName)
+        if (file.exists() && file.length() > 0L) {
+            return file.absolutePath
+        }
+        val bitmap = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
+        return try {
+            val canvas = Canvas(bitmap)
+            drawable.setBounds(0, 0, sizePx, sizePx)
+            drawable.draw(canvas)
+            FileOutputStream(file).use { stream ->
+                bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream)
+            }
+            file.absolutePath
+        } catch (_: Throwable) {
+            null
+        } finally {
+            bitmap.recycle()
+        }
     }
 
     private fun importArtwork(uriString: String, maxWidth: Int, maxHeight: Int): String {

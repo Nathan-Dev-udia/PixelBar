@@ -43,3 +43,10 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Android signing secrets (never commit)
+*.jks
+*.keystore
+**/key.properties
+*.b64
+*.base64
