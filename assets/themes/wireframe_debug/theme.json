@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "id": "wireframe_debug",
+  "name": "Wireframe Debug",
+  "author": "Onda Pixel",
+  "version": "0.1.0",
+  "engine": "wireframe_debug",
+  "colors": {
+    "background": "#0B0D10",
+    "surface": "#12161C",
+    "foreground": "#E6E6E6",
+    "muted": "#5A6270",
+    "accent": "#00E5FF",
+    "favorite": "#FFC400",
+    "danger": "#FF5370"
+  },
+  "background": { "type": "solid", "color": "#0B0D10" },
+  "audio": { "enabled": false, "volume": 0.0 },
+  "options": {
+    "tileWidth": 136,
+    "tileHeight": 136,
+    "iconSize": 72,
+    "showDebugPanel": true
+  }
+}
