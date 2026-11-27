@@ -1634,4 +1634,204 @@ void main() {
       },
     );
   });
+
+  group('Multi-source Metadata & Immediate Startup Gamepad Focus', () {
+    test(
+      'parses Nintendo Europe catalog JSON with PT-BR description and art',
+      () {
+        final raw = {
+          'response': {
+            'docs': [
+              {
+                'fs_id': '1173332',
+                'title': 'Super Mario Odyssey',
+                'system_names_txt': ['Nintendo Switch'],
+                'product_catalog_description_s':
+                    'Explora reinos incríveis com o Mario e o Cappy.',
+                'publisher': 'Nintendo',
+                'dates_released_dts': ['2017-10-27T00:00:00Z'],
+                'image_url':
+                    'https://www.nintendo.com/eu/media/images/packshot.jpg',
+                'image_url_sq_s':
+                    'https://www.nintendo.com/eu/media/images/square.jpg',
+                'image_url_h2x1_s':
+                    'https://www.nintendo.com/eu/media/images/banner.jpg',
+              },
+            ],
+          },
+        };
+
+        final items = GameMetadataService.parseNintendoResponse(raw);
+        expect(items, hasLength(1));
+        final mario = items.first;
+        expect(mario.provider, 'Nintendo (Nintendo Switch)');
+        expect(mario.title, 'Super Mario Odyssey');
+        expect(mario.releaseYear, '2017');
+        expect(mario.developer, 'Nintendo');
+        expect(mario.description, contains('Mario e o Cappy'));
+        expect(mario.coverUrl, endsWith('packshot.jpg'));
+        expect(mario.iconUrl, endsWith('square.jpg'));
+        expect(mario.bannerUrl, endsWith('banner.jpg'));
+      },
+    );
+
+    test('parses Wikipedia PT/EN game articles for PS2/PS3 exclusives', () {
+      final raw = {
+        'query': {
+          'pages': {
+            '1080841': {
+              'pageid': 1080841,
+              'index': 1,
+              'title': 'God of War II (jogo eletrônico)',
+              'extract':
+                  'God of War II é um jogo eletrônico de ação-aventura desenvolvido pela Santa Monica Studio e publicado pela Sony Computer Entertainment para PlayStation 2 em 2007.',
+              'original': {
+                'source':
+                    'https://upload.wikimedia.org/wikipedia/pt/7/7e/God_of_War_2_capa.png',
+              },
+              'thumbnail': {
+                'source':
+                    'https://upload.wikimedia.org/wikipedia/pt/thumb/God_of_War_2_capa.png',
+              },
+            },
+            '9999999': {
+              'pageid': 9999999,
+              'index': 2,
+              'title': 'Greek Mythology Book',
+              'extract': 'A history book about ancient Greece written in 1980.',
+            },
+          },
+        },
+      };
+
+      final items = GameMetadataService.parseWikipediaResponse(raw, lang: 'pt');
+      expect(items, hasLength(1));
+      final gow = items.first;
+      expect(gow.provider, 'Wikipedia PT');
+      expect(gow.title, 'God of War II');
+      expect(gow.releaseYear, '2007');
+      expect(gow.developer, 'Santa Monica Studio');
+      expect(gow.coverUrl, contains('God_of_War_2_capa.png'));
+    });
+
+    test('rankAndDeduplicateCandidates ranks exact console matches first', () {
+      final ranked = GameMetadataService.rankAndDeduplicateCandidates(
+        'God of War Collection',
+        const [
+          MetadataCandidate(
+            provider: 'Steam',
+            externalId: '1',
+            title: 'God of War',
+            coverUrl: 'https://example.com/1.jpg',
+          ),
+          MetadataCandidate(
+            provider: 'Wikipedia PT',
+            externalId: 'pt:2',
+            title: 'God of War Collection',
+            coverUrl: 'https://example.com/2.jpg',
+            description: 'Coletânea remasterizada de PS2 para PS3.',
+          ),
+          MetadataCandidate(
+            provider: 'Wikipedia PT',
+            externalId: 'pt:2',
+            title: 'God of War Collection',
+          ),
+        ],
+      );
+
+      expect(ranked, hasLength(2));
+      expect(ranked.first.title, 'God of War Collection');
+    });
+
+    testWidgets(
+      'first D-Pad press navigates immediately after startup in PSP XMB theme',
+      (tester) async {
+        tester.view.physicalSize = const Size(1280, 720);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.reset);
+        registerDefaultThemes();
+        LifecycleMemoryManager.instance.install();
+
+        final tempThemesDir = Directory.systemTemp.createTempSync(
+          'ondadeck_startup_focus_',
+        );
+        addTearDown(() {
+          if (tempThemesDir.existsSync()) {
+            tempThemesDir.deleteSync(recursive: true);
+          }
+        });
+
+        final fakeGateway = _FakeLauncherGateway(
+          installedApps: const [
+            InstalledApp(
+              packageName: 'com.ps2.gow',
+              label: 'God of War Collection',
+              isGame: true,
+            ),
+            InstalledApp(
+              packageName: 'com.nintendo.mario',
+              label: 'Super Mario Galaxy',
+              isGame: true,
+            ),
+          ],
+        );
+        final fakeRepo = _InMemoryGameLibraryRepository(
+          initialSettings: const LauncherSettings(
+            activeThemeId: 'psp_xmb',
+            reduceMotion: true,
+            autoImportGames: true,
+          ),
+        );
+        final packageService = ThemePackageService(
+          themesDirProvider: () async => tempThemesDir.path,
+        );
+
+        late ProviderContainer container;
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              launcherGatewayProvider.overrideWithValue(fakeGateway),
+              gameLibraryRepositoryProvider.overrideWithValue(fakeRepo),
+              themePackageServiceProvider.overrideWithValue(packageService),
+            ],
+            child: Consumer(
+              builder: (context, ref, child) {
+                container = ProviderScope.containerOf(context);
+                return const OndaDeckApp();
+              },
+            ),
+          ),
+        );
+
+        for (var i = 0; i < 60; i++) {
+          await tester.runAsync(
+            () => Future<void>.delayed(const Duration(milliseconds: 25)),
+          );
+          await tester.pump();
+          final s = container.read(libraryControllerProvider);
+          if (s.status == LibraryStatus.ready &&
+              !s.isSyncing &&
+              s.theme.id == 'psp_xmb' &&
+              s.totalGames == 2) {
+            break;
+          }
+        }
+        await tester.pumpAndSettle();
+
+        expect(
+          container.read(libraryControllerProvider).focusedGameId,
+          'pkg:com.ps2.gow',
+        );
+
+        // A single D-Pad Down press must immediately advance focus to the 2nd game.
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+        await tester.pumpAndSettle();
+
+        expect(
+          container.read(libraryControllerProvider).focusedGameId,
+          'pkg:com.nintendo.mario',
+        );
+      },
+    );
+  });
 }

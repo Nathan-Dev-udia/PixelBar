@@ -20,12 +20,25 @@ class MainActivity : FlutterActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         applyEdgeToEdgeFullscreen()
+        requestControllerFocus()
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
         if (hasFocus) {
             applyEdgeToEdgeFullscreen()
+            requestControllerFocus()
+        }
+    }
+
+    private fun requestControllerFocus() {
+        val content = findViewById<View>(android.R.id.content) ?: return
+        content.post {
+            if (!content.hasFocus()) {
+                content.isFocusable = true
+                content.isFocusableInTouchMode = true
+                content.requestFocus()
+            }
         }
     }
 

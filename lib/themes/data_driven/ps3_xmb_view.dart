@@ -98,6 +98,42 @@ class _Ps3XmbViewState extends State<Ps3XmbView> {
   );
 
   @override
+  void initState() {
+    super.initState();
+    _ensureActiveFocus();
+  }
+
+  @override
+  void didUpdateWidget(Ps3XmbView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.categories != widget.categories ||
+        oldWidget.categoryIndex != widget.categoryIndex ||
+        (oldWidget.selectedGame == null && widget.selectedGame != null)) {
+      _ensureActiveFocus();
+    }
+  }
+
+  void _ensureActiveFocus({int retries = 3}) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _optionsOpen) return;
+      if (ModalRoute.of(context)?.isCurrent == false) return;
+      if (_activeColumn == _XmbColumnKind.games) {
+        final game = widget.selectedGame;
+        final target = game != null
+            ? widget.nodeForGame(game)
+            : widget.emptyAddNode;
+        if (target.context != null && target.canRequestFocus) {
+          if (!target.hasFocus) {
+            target.requestFocus();
+          }
+        } else if (retries > 0) {
+          _ensureActiveFocus(retries: retries - 1);
+        }
+      }
+    });
+  }
+
+  @override
   void dispose() {
     for (final node in _menuNodes.values) {
       node.dispose();
@@ -400,9 +436,23 @@ class _Ps3XmbViewState extends State<Ps3XmbView> {
             widget.selectedGame?.media.backgroundPath ??
             widget.selectedGame?.media.bannerPath;
 
-        return Focus(
-          canRequestFocus: false,
-          skipTraversal: true,
+        return FocusScope(
+          autofocus: true,
+          onFocusChange: (hasFocus) {
+            if (hasFocus &&
+                !_optionsOpen &&
+                _activeColumn == _XmbColumnKind.games) {
+              final game = widget.selectedGame;
+              final target = game != null
+                  ? widget.nodeForGame(game)
+                  : widget.emptyAddNode;
+              if (target.context != null &&
+                  target.canRequestFocus &&
+                  !target.hasPrimaryFocus) {
+                target.requestFocus();
+              }
+            }
+          },
           onKeyEvent: (_, event) {
             if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
               return KeyEventResult.ignored;

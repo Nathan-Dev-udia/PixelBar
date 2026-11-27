@@ -62,8 +62,9 @@ class MetadataCandidate {
   );
 }
 
-/// Playnite-style metadata lookup and media downloader using the keyless Steam
-/// Store API (PT-BR descriptions & official Steam artwork) with optional
+/// Playnite-style metadata lookup and media downloader using keyless multi-platform
+/// sources: Steam Store (PC/Multi), Nintendo Europe (Switch/Wii/3DS/Retro),
+/// Wikipedia PT/EN (PS2/PS3/PSP/Nintendo/Console exclusives), plus optional
 /// SteamGridDB API v2 enrichment.
 class GameMetadataService {
   GameMetadataService({
@@ -252,15 +253,90 @@ class GameMetadataService {
     );
   }
 
+  static const String _userAgent =
+      'OndaDeck/1.0 (https://github.com/Nathan-Dev-udia/PixelBar)';
+
   // ---- Isolate-safe network helpers -----------------------------------------
 
   static Future<List<MetadataCandidate>> _searchRemoteSync(
     String query,
     String steamGridDbApiKey,
   ) async {
-    final results = <MetadataCandidate>[];
+    final batches = await Future.wait<List<MetadataCandidate>>([
+      _searchSteam(query),
+      _searchNintendo(query),
+      _searchWikipedia(query, lang: 'pt'),
+      _searchWikipedia(query, lang: 'en'),
+      if (steamGridDbApiKey.isNotEmpty)
+        _searchSteamGridDb(query, steamGridDbApiKey),
+    ]);
 
-    // 1. Keyless Steam Store Search API (free, no key required).
+    final combined = <MetadataCandidate>[];
+    for (final batch in batches) {
+      combined.addAll(batch);
+    }
+
+    return rankAndDeduplicateCandidates(query, combined);
+  }
+
+  /// Ranks candidates by title relevance and artwork availability while
+  /// removing exact duplicate `(provider, externalId)` entries.
+  static List<MetadataCandidate> rankAndDeduplicateCandidates(
+    String query,
+    List<MetadataCandidate> candidates,
+  ) {
+    final seenKeys = <String>{};
+    final unique = <MetadataCandidate>[];
+    for (final c in candidates) {
+      final key = '${c.provider}:${c.externalId}';
+      if (seenKeys.add(key)) {
+        unique.add(c);
+      }
+    }
+
+    final normQuery = _normalizeTitle(query);
+    final queryTokens = normQuery
+        .split(' ')
+        .where((t) => t.isNotEmpty)
+        .toList(growable: false);
+
+    int score(MetadataCandidate c) {
+      final normTitle = _normalizeTitle(c.title);
+      var s = 0;
+      if (normTitle == normQuery) {
+        s += 100;
+      } else if (normTitle.startsWith(normQuery)) {
+        s += 75;
+      } else if (normTitle.contains(normQuery)) {
+        s += 55;
+      } else if (queryTokens.isNotEmpty) {
+        var matched = 0;
+        for (final token in queryTokens) {
+          if (normTitle.contains(token)) matched++;
+        }
+        s += ((matched * 45) ~/ queryTokens.length);
+      }
+
+      if (c.coverUrl != null && c.coverUrl!.isNotEmpty) s += 16;
+      if (c.bannerUrl != null && c.bannerUrl!.isNotEmpty) s += 8;
+      if (c.description != null && c.description!.isNotEmpty) s += 6;
+
+      if (c.provider == 'Steam' || c.provider.startsWith('Nintendo')) {
+        s += 8;
+      } else if (c.provider == 'Wikipedia PT') {
+        s += 5;
+      } else if (c.provider == 'Wikipedia EN') {
+        s += 3;
+      }
+      return s;
+    }
+
+    unique.sort((a, b) => score(b).compareTo(score(a)));
+    return unique;
+  }
+
+  static Future<List<MetadataCandidate>> _searchSteam(String query) async {
+    final results = <MetadataCandidate>[];
     try {
       final steamUri = Uri.parse(
         'https://store.steampowered.com/api/storesearch/?term=${Uri.encodeQueryComponent(query)}&l=brazilian&cc=BR',
@@ -269,7 +345,7 @@ class GameMetadataService {
       if (raw is Map) {
         final items = raw['items'];
         if (items is List) {
-          for (final item in items.take(12)) {
+          for (final item in items.take(8)) {
             if (item is! Map) continue;
             final id = item['id'];
             final name = item['name'] as String?;
@@ -295,50 +371,325 @@ class GameMetadataService {
         }
       }
     } on Object {
-      // Non-fatal: still allow optional SteamGridDB lookup below.
+      // Non-fatal: other providers still return results.
     }
+    return results;
+  }
 
-    // 2. Optional SteamGridDB v2 autocomplete when the user provided a key.
-    if (steamGridDbApiKey.isNotEmpty) {
-      try {
-        final sgdbUri = Uri.parse(
-          'https://www.steamgriddb.com/api/v2/search/autocomplete/${Uri.encodeComponent(query)}',
-        );
-        final raw = await _httpGetJson(
-          sgdbUri,
-          headers: {'Authorization': 'Bearer $steamGridDbApiKey'},
-        );
-        if (raw is Map && raw['success'] == true) {
-          final data = raw['data'];
-          if (data is List) {
-            for (final item in data.take(10)) {
-              if (item is! Map) continue;
-              final id = item['id'];
-              final name = item['name'] as String?;
-              if (id == null || name == null || name.isEmpty) continue;
-              final releaseDate = item['release_date'];
-              String? year;
-              if (releaseDate is num && releaseDate > 0) {
-                year =
-                    '${DateTime.fromMillisecondsSinceEpoch(releaseDate.toInt() * 1000, isUtc: true).year}';
-              }
-              results.add(
-                MetadataCandidate(
-                  provider: 'SteamGridDB',
-                  externalId: '$id',
-                  title: name,
-                  releaseYear: year,
-                ),
-              );
+  static Future<List<MetadataCandidate>> _searchNintendo(String query) async {
+    try {
+      final uri = Uri.parse(
+        'https://searching.nintendo-europe.com/pt/select?q=${Uri.encodeQueryComponent(query)}&fq=type:GAME&rows=8&wt=json',
+      );
+      final raw = await _httpGetJson(uri);
+      return parseNintendoResponse(raw);
+    } on Object {
+      return const [];
+    }
+  }
+
+  /// Parses the official Nintendo Europe public Solr JSON response into
+  /// [MetadataCandidate] items (Switch, Wii U, Wii, 3DS, DS, GameCube, N64, SNES, NES, GBA).
+  static List<MetadataCandidate> parseNintendoResponse(Object? raw) {
+    if (raw is! Map) return const [];
+    final response = raw['response'];
+    if (response is! Map) return const [];
+    final docs = response['docs'];
+    if (docs is! List) return const [];
+
+    final results = <MetadataCandidate>[];
+    for (final doc in docs.take(8)) {
+      if (doc is! Map) continue;
+      final id = doc['fs_id']?.toString() ?? '';
+      final title = (doc['title'] as String? ?? '').trim();
+      if (id.isEmpty || title.isEmpty) continue;
+
+      final systems = doc['system_names_txt'];
+      final systemLabel = systems is List && systems.isNotEmpty
+          ? systems.first.toString().trim()
+          : '';
+      final providerLabel = systemLabel.isNotEmpty
+          ? 'Nintendo ($systemLabel)'
+          : 'Nintendo';
+
+      final descRaw =
+          (doc['product_catalog_description_s'] as String?) ??
+          (doc['excerpt'] as String?) ??
+          '';
+      final description = _stripHtml(descRaw);
+
+      final publisher = (doc['publisher'] as String? ?? '').trim();
+
+      String? year;
+      final dates = doc['dates_released_dts'];
+      if (dates is List && dates.isNotEmpty) {
+        year = _extractYear(dates.first.toString());
+      }
+      year ??= _extractYear(doc['pretty_date_s']?.toString() ?? '');
+
+      final squareUrl = _normalizeImageUrl(
+        (doc['image_url_sq_s'] as String?) ??
+            (doc['wishlist_email_square_image_url_s'] as String?),
+      );
+      final packshotUrl = _normalizeImageUrl(doc['image_url'] as String?);
+      final bannerUrl = _normalizeImageUrl(
+        (doc['image_url_h2x1_s'] as String?) ??
+            (doc['wishlist_email_banner640w_image_url_s'] as String?) ??
+            squareUrl ??
+            packshotUrl,
+      );
+
+      results.add(
+        MetadataCandidate(
+          provider: providerLabel,
+          externalId: id,
+          title: title,
+          description: description.isNotEmpty ? description : null,
+          developer: publisher.isNotEmpty ? publisher : 'Nintendo',
+          releaseYear: year,
+          iconUrl: squareUrl ?? packshotUrl,
+          coverUrl: packshotUrl ?? squareUrl,
+          bannerUrl: bannerUrl,
+          backgroundUrl: bannerUrl ?? packshotUrl ?? squareUrl,
+        ),
+      );
+    }
+    return results;
+  }
+
+  static Future<List<MetadataCandidate>> _searchWikipedia(
+    String query, {
+    required String lang,
+  }) async {
+    try {
+      final searchTerm = lang == 'en' ? '$query video game' : query;
+      final uri = Uri.parse(
+        'https://$lang.wikipedia.org/w/api.php'
+        '?action=query'
+        '&generator=search'
+        '&gsrsearch=${Uri.encodeQueryComponent(searchTerm)}'
+        '&gsrlimit=6'
+        '&prop=pageimages|extracts'
+        '&pilicense=any'
+        '&piprop=original|thumbnail'
+        '&pithumbsize=600'
+        '&exintro=1'
+        '&explaintext=1'
+        '&exsentences=4'
+        '&format=json',
+      );
+      final raw = await _httpGetJson(uri);
+      return parseWikipediaResponse(raw, lang: lang);
+    } on Object {
+      return const [];
+    }
+  }
+
+  /// Parses MediaWiki `action=query` (`pageimages|extracts`) JSON into
+  /// console/multi-platform [MetadataCandidate] items (PS2, PS3, PSP, Nintendo, etc.).
+  static List<MetadataCandidate> parseWikipediaResponse(
+    Object? raw, {
+    required String lang,
+  }) {
+    if (raw is! Map) return const [];
+    final queryNode = raw['query'];
+    if (queryNode is! Map) return const [];
+    final pages = queryNode['pages'];
+    if (pages is! Map) return const [];
+
+    final entries = pages.values.whereType<Map>().toList()
+      ..sort((a, b) {
+        final ai = (a['index'] as num?)?.toInt() ?? 999;
+        final bi = (b['index'] as num?)?.toInt() ?? 999;
+        return ai.compareTo(bi);
+      });
+
+    final providerLabel = lang == 'pt' ? 'Wikipedia PT' : 'Wikipedia EN';
+    final results = <MetadataCandidate>[];
+
+    for (final page in entries) {
+      final pageId = page['pageid']?.toString() ?? '';
+      final rawTitle = (page['title'] as String? ?? '').trim();
+      final extract = (page['extract'] as String? ?? '').trim();
+      if (pageId.isEmpty || rawTitle.isEmpty) continue;
+      if (!_looksLikeVideoGameArticle(rawTitle, extract)) continue;
+
+      final cleanTitle = _cleanWikipediaTitle(rawTitle);
+      final original = page['original'];
+      final thumb = page['thumbnail'];
+      final originalUrl = original is Map
+          ? _normalizeImageUrl(original['source'] as String?)
+          : null;
+      final thumbUrl = thumb is Map
+          ? _normalizeImageUrl(thumb['source'] as String?)
+          : null;
+      final bestImage = originalUrl ?? thumbUrl;
+
+      results.add(
+        MetadataCandidate(
+          provider: providerLabel,
+          externalId: '$lang:$pageId',
+          title: cleanTitle,
+          description: extract.isNotEmpty ? extract : null,
+          developer: _extractDeveloperFromSummary(extract),
+          releaseYear: _extractYear(extract),
+          iconUrl: thumbUrl ?? originalUrl,
+          coverUrl: bestImage,
+          bannerUrl: bestImage,
+          backgroundUrl: bestImage,
+        ),
+      );
+    }
+    return results;
+  }
+
+  static Future<List<MetadataCandidate>> _searchSteamGridDb(
+    String query,
+    String steamGridDbApiKey,
+  ) async {
+    final results = <MetadataCandidate>[];
+    try {
+      final sgdbUri = Uri.parse(
+        'https://www.steamgriddb.com/api/v2/search/autocomplete/${Uri.encodeComponent(query)}',
+      );
+      final raw = await _httpGetJson(
+        sgdbUri,
+        headers: {'Authorization': 'Bearer $steamGridDbApiKey'},
+      );
+      if (raw is Map && raw['success'] == true) {
+        final data = raw['data'];
+        if (data is List) {
+          for (final item in data.take(10)) {
+            if (item is! Map) continue;
+            final id = item['id'];
+            final name = item['name'] as String?;
+            if (id == null || name == null || name.isEmpty) continue;
+            final releaseDate = item['release_date'];
+            String? year;
+            if (releaseDate is num && releaseDate > 0) {
+              year =
+                  '${DateTime.fromMillisecondsSinceEpoch(releaseDate.toInt() * 1000, isUtc: true).year}';
             }
+            results.add(
+              MetadataCandidate(
+                provider: 'SteamGridDB',
+                externalId: '$id',
+                title: name,
+                releaseYear: year,
+              ),
+            );
           }
         }
-      } on Object {
-        // Non-fatal fallback.
+      }
+    } on Object {
+      // Non-fatal fallback.
+    }
+    return results;
+  }
+
+  static bool _looksLikeVideoGameArticle(String title, String extract) {
+    final haystack = '${title.toLowerCase()} ${extract.toLowerCase()}';
+    const keywords = [
+      'jogo eletrônico',
+      'jogo eletrónico',
+      'video game',
+      'videogame',
+      'playstation',
+      'ps2',
+      'ps3',
+      'ps4',
+      'ps5',
+      'psp',
+      'ps vita',
+      'nintendo',
+      'gamecube',
+      'game boy',
+      'super nintendo',
+      'snes',
+      'n64',
+      'wii',
+      'switch',
+      'xbox',
+      'sega',
+      'dreamcast',
+      'mega drive',
+      'atari',
+      'arcade',
+      'console',
+      'hack and slash',
+      'role-playing',
+      'rpg',
+      'action-adventure',
+      'ação-aventura',
+      'first-person shooter',
+      'platformer',
+      'jogo de plataforma',
+      'desenvolvido pela',
+      'desenvolvido por',
+      'developed by',
+      'remaster',
+      'coletânea',
+      'collection',
+    ];
+    return keywords.any(haystack.contains);
+  }
+
+  static String _cleanWikipediaTitle(String title) {
+    return title
+        .replaceAll(
+          RegExp(
+            r'\s*\((?:\d{4}\s+)?(?:video game|jogo eletrônico|jogo eletrónico|jogo|game|series|franchise|série)\)$',
+            caseSensitive: false,
+          ),
+          '',
+        )
+        .trim();
+  }
+
+  static String? _extractYear(String text) {
+    final match = RegExp(r'\b(19[7-9]\d|20\d{2})\b').firstMatch(text);
+    return match?.group(1);
+  }
+
+  static String? _extractDeveloperFromSummary(String extract) {
+    if (extract.isEmpty) return null;
+    final patterns = [
+      RegExp(
+        r'desenvolvido (?:pela|pelo|por) ([^.,;\n]+?)(?:\s+e publicado|\s+para|[.,;])',
+        caseSensitive: false,
+      ),
+      RegExp(
+        r'developed by ([^.,;\n]+?)(?:\s+and published|\s+for|[.,;])',
+        caseSensitive: false,
+      ),
+    ];
+    for (final pattern in patterns) {
+      final match = pattern.firstMatch(extract);
+      final dev = match?.group(1)?.trim();
+      if (dev != null && dev.isNotEmpty && dev.length <= 60) {
+        return dev;
       }
     }
+    return null;
+  }
 
-    return results;
+  static String? _normalizeImageUrl(String? raw) {
+    if (raw == null) return null;
+    final trimmed = raw.trim();
+    if (trimmed.isEmpty) return null;
+    if (trimmed.startsWith('//')) return 'https:$trimmed';
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+      return trimmed;
+    }
+    return null;
+  }
+
+  static String _normalizeTitle(String input) {
+    return input
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9\s]'), ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
   }
 
   static Future<MetadataCandidate> _fetchDetailsRemoteSync(
@@ -445,7 +796,7 @@ class GameMetadataService {
       ..connectionTimeout = const Duration(seconds: 12);
     try {
       final req = await client.getUrl(uri);
-      req.headers.set(HttpHeaders.userAgentHeader, 'OndaDeck/1.0');
+      req.headers.set(HttpHeaders.userAgentHeader, _userAgent);
       headers.forEach(req.headers.set);
       final res = await req.close().timeout(const Duration(seconds: 12));
       if (res.statusCode < 200 || res.statusCode >= 300) {
@@ -468,7 +819,7 @@ class GameMetadataService {
       ..connectionTimeout = const Duration(seconds: 12);
     try {
       final req = await client.getUrl(uri);
-      req.headers.set(HttpHeaders.userAgentHeader, 'OndaDeck/1.0');
+      req.headers.set(HttpHeaders.userAgentHeader, _userAgent);
       final res = await req.close().timeout(const Duration(seconds: 15));
       if (res.statusCode < 200 || res.statusCode >= 300) {
         return null;

@@ -406,7 +406,8 @@ class _GameMetadataEditorDialogState
                 onSubmitted: (_) => _runSearch(),
                 decoration: InputDecoration(
                   isDense: true,
-                  hintText: 'Nome do jogo (ex: Celeste, Hades, Hollow Knight)',
+                  hintText:
+                      'Nome do jogo (ex: God of War Collection, Super Mario, Zelda, Hades)',
                   hintStyle: const TextStyle(color: Color(0xFF5A6270)),
                   filled: true,
                   fillColor: const Color(0xFF171D26),
@@ -515,8 +516,8 @@ class _GameMetadataEditorDialogState
               ? Center(
                   child: Text(
                     _searching
-                        ? 'Consultando catálogo Steam / SteamGridDB...'
-                        : 'Toque em "Buscar Metadados" para baixar nome, descrição, logo, fundo e ícone automaticamente.',
+                        ? 'Consultando Steam, Nintendo, Wikipedia (PS2/PS3/Retro) e SteamGridDB...'
+                        : 'Toque em "Buscar Metadados" para buscar em Steam, Nintendo e Wikipedia (PS2/PS3/PSP/Retro).',
                     textAlign: TextAlign.center,
                     style: const TextStyle(
                       color: Color(0xFF7A8494),

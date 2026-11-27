@@ -104,6 +104,8 @@ class _OndaDeckAppState extends State<OndaDeckApp> {
   @override
   void initState() {
     super.initState();
+    FocusManager.instance.highlightStrategy =
+        FocusHighlightStrategy.alwaysTraditional;
     registerDefaultThemes();
   }
 

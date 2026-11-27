@@ -102,12 +102,16 @@ class _DataDrivenThemeEngineState extends State<DataDrivenThemeEngine> {
   @override
   void didUpdateWidget(DataDrivenThemeEngine oldWidget) {
     super.didUpdateWidget(oldWidget);
+    final statusChanged = oldWidget.state.status != widget.state.status;
+    final themeChanged = oldWidget.state.theme.id != widget.state.theme.id;
     final categoriesChanged =
         oldWidget.state.categories != widget.state.categories;
     final focusedChanged =
         oldWidget.state.focusedGameId != widget.state.focusedGameId;
-    if (categoriesChanged || focusedChanged) {
-      _syncSelectionFromState(requestFocus: categoriesChanged);
+    if (statusChanged || themeChanged || categoriesChanged || focusedChanged) {
+      _syncSelectionFromState(
+        requestFocus: statusChanged || themeChanged || categoriesChanged,
+      );
     }
   }
 
@@ -200,19 +204,25 @@ class _DataDrivenThemeEngineState extends State<DataDrivenThemeEngine> {
     }
   }
 
-  void _scheduleInitialFocus() {
+  void _scheduleInitialFocus({int retries = 3}) {
     _pendingFocusSync = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !_pendingFocusSync) return;
-      _pendingFocusSync = false;
+      if (ModalRoute.of(context)?.isCurrent == false) {
+        _pendingFocusSync = false;
+        return;
+      }
       final selected = _selectedGame;
-      if (selected != null) {
-        final node = _nodeFor(selected);
-        if (node.canRequestFocus && !node.hasFocus) {
-          node.requestFocus();
+      final targetNode = selected != null ? _nodeFor(selected) : _emptyAddNode;
+      if (targetNode.context != null && targetNode.canRequestFocus) {
+        _pendingFocusSync = false;
+        if (!targetNode.hasFocus) {
+          targetNode.requestFocus();
         }
-      } else if (_emptyAddNode.canRequestFocus) {
-        _emptyAddNode.requestFocus();
+      } else if (retries > 0) {
+        _scheduleInitialFocus(retries: retries - 1);
+      } else {
+        _pendingFocusSync = false;
       }
     });
   }
